@@ -1,0 +1,216 @@
+package utils
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// CurrentTime returns the current time in UTC
+func CurrentTime() time.Time {
+	return time.Now().UTC()
+}
+
+// TimePtr returns a pointer to a time value
+func TimePtr(t time.Time) *time.Time {
+	return &t
+}
+
+// MarshalJSON marshals an object to JSON
+func MarshalJSON(v interface{}) (string, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// UnmarshalJSON unmarshals JSON to an object
+func UnmarshalJSON(data string, v interface{}) error {
+	return json.Unmarshal([]byte(data), v)
+}
+
+// WriteFile writes data to a file
+func WriteFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+	
+	return ioutil.WriteFile(path, data, 0644)
+}
+
+// ReadFile reads data from a file
+func ReadFile(path string) ([]byte, error) {
+	return ioutil.ReadFile(path)
+}
+
+// IsValidURL checks if a string is a valid URL
+func IsValidURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme != "" && u.Host != ""
+}
+
+// SanitizeFileName removes invalid characters from a file name
+func SanitizeFileName(name string) string {
+	// Replace characters that are not valid in file names
+	invalid := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+	result := name
+	
+	for _, char := range invalid {
+		result = strings.ReplaceAll(result, char, "_")
+	}
+	
+	return result
+}
+
+// GenerateSlug generates a slug from a string
+func GenerateSlug(s string) string {
+	// Convert to lowercase
+	result := strings.ToLower(s)
+	
+	// Replace spaces with hyphens
+	result = strings.ReplaceAll(result, " ", "-")
+	
+	// Remove special characters
+	result = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			return r
+		}
+		return -1
+	}, result)
+	
+	// Remove consecutive hyphens
+	for strings.Contains(result, "--") {
+		result = strings.ReplaceAll(result, "--", "-")
+	}
+	
+	// Trim hyphens from start and end
+	result = strings.Trim(result, "-")
+	
+	return result
+}
+
+// IsInScope checks if a domain is in scope
+func IsInScope(domain string, inScope []string, outOfScope []string) bool {
+	// Check if domain is explicitly out of scope
+	for _, d := range outOfScope {
+		if MatchDomain(d, domain) {
+			return false
+		}
+	}
+	
+	// Check if domain is explicitly in scope
+	for _, d := range inScope {
+		if MatchDomain(d, domain) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// MatchDomain checks if a domain matches a pattern (including wildcards)
+func MatchDomain(pattern, domain string) bool {
+	// Exact match
+	if pattern == domain {
+		return true
+	}
+	
+	// Wildcard match
+	if strings.HasPrefix(pattern, "*.") {
+		suffix := pattern[2:]
+		return strings.HasSuffix(domain, suffix) && strings.Count(domain, ".") >= strings.Count(suffix, ".")+1
+	}
+	
+	return false
+}
+
+// IsSubdomain checks if a domain is a subdomain of another
+func IsSubdomain(parent, child string) bool {
+	// Normalize domains (remove trailing dot)
+	parent = strings.TrimSuffix(parent, ".")
+	child = strings.TrimSuffix(child, ".")
+	
+	// Check if child ends with parent and has at least one more subdomain
+	return strings.HasSuffix(child, parent) && 
+		strings.HasSuffix(child, "."+parent) && 
+		strings.Count(child, ".") > strings.Count(parent, ".")
+}
+
+// FormatDuration formats a duration in a human-readable form
+func FormatDuration(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	}
+	if d < time.Hour {
+		minutes := d / time.Minute
+		seconds := (d % time.Minute) / time.Second
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	
+	hours := d / time.Hour
+	minutes := (d % time.Hour) / time.Minute
+	return fmt.Sprintf("%dh %dm", hours, minutes)
+}
+
+// StringInSlice checks if a string is in a slice
+func StringInSlice(s string, slice []string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+// UniqueStrings returns a slice with unique strings
+func UniqueStrings(slice []string) []string {
+	keys := make(map[string]bool)
+	unique := []string{}
+	
+	for _, item := range slice {
+		if _, exists := keys[item]; !exists {
+			keys[item] = true
+			unique = append(unique, item)
+		}
+	}
+	
+	return unique
+}
+
+// ExtractDomain extracts the domain from a URL
+func ExtractDomain(urlString string) string {
+	u, err := url.Parse(urlString)
+	if err != nil || u.Host == "" {
+		return urlString // Return as is if not a valid URL
+	}
+	
+	return u.Host
+}
+
+// FileExists checks if a file exists
+func FileExists(path string) bool {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// DirExists checks if a directory exists
+func DirExists(path string) bool {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return info.IsDir()
+}
