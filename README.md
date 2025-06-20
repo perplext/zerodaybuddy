@@ -13,6 +13,36 @@ ZeroDayBuddy is a comprehensive bug bounty assistant tool that streamlines the p
 
 ## Installation
 
+### Option 1: Download Pre-built Binary (Recommended)
+
+Download the latest release for your platform from the [GitHub Releases](https://github.com/perplext/zerodaybuddy/releases) page.
+
+**Linux (x64):**
+```bash
+curl -L -o zerodaybuddy https://github.com/perplext/zerodaybuddy/releases/latest/download/zerodaybuddy-linux-amd64
+chmod +x zerodaybuddy
+sudo mv zerodaybuddy /usr/local/bin/
+```
+
+**macOS (Apple Silicon):**
+```bash
+curl -L -o zerodaybuddy https://github.com/perplext/zerodaybuddy/releases/latest/download/zerodaybuddy-darwin-arm64
+chmod +x zerodaybuddy
+sudo mv zerodaybuddy /usr/local/bin/
+```
+
+**macOS (Intel):**
+```bash
+curl -L -o zerodaybuddy https://github.com/perplext/zerodaybuddy/releases/latest/download/zerodaybuddy-darwin-amd64
+chmod +x zerodaybuddy
+sudo mv zerodaybuddy /usr/local/bin/
+```
+
+**Windows:**
+Download `zerodaybuddy-windows-amd64.exe` from the releases page.
+
+### Option 2: Build from Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/perplext/zerodaybuddy.git
@@ -36,7 +66,7 @@ zerodaybuddy init
 # List available bug bounty programs
 zerodaybuddy list-programs
 
-# Create a new project for a specific program
+# Create a new project for a specific program  
 zerodaybuddy project create --platform hackerone --program example-program
 
 # Run reconnaissance
@@ -46,7 +76,7 @@ zerodaybuddy recon run --project example-program
 zerodaybuddy scan run --project example-program
 
 # Generate a report
-zerodaybuddy report generate --project example-program
+zerodaybuddy report generate --project example-program --format markdown
 ```
 
 ### Web Interface

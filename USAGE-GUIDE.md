@@ -17,6 +17,29 @@ This document provides detailed instructions on how to use ZeroDayBuddy for bug 
 
 ### Installation
 
+**Option 1: Download Pre-built Binary (Recommended)**
+
+Download the latest release for your platform from the [GitHub Releases](https://github.com/perplext/zerodaybuddy/releases) page:
+
+```bash
+# Linux (x64)
+curl -L -o zerodaybuddy https://github.com/perplext/zerodaybuddy/releases/latest/download/zerodaybuddy-linux-amd64
+chmod +x zerodaybuddy
+sudo mv zerodaybuddy /usr/local/bin/
+
+# macOS (Apple Silicon)  
+curl -L -o zerodaybuddy https://github.com/perplext/zerodaybuddy/releases/latest/download/zerodaybuddy-darwin-arm64
+chmod +x zerodaybuddy
+sudo mv zerodaybuddy /usr/local/bin/
+
+# macOS (Intel)
+curl -L -o zerodaybuddy https://github.com/perplext/zerodaybuddy/releases/latest/download/zerodaybuddy-darwin-amd64
+chmod +x zerodaybuddy
+sudo mv zerodaybuddy /usr/local/bin/
+```
+
+**Option 2: Build from Source**
+
 ```bash
 # Clone the repository
 git clone https://github.com/perplext/zerodaybuddy.git
@@ -51,9 +74,6 @@ The initialization process will:
 ### Creating a New Project
 
 ```bash
-# Create a project manually
-zerodaybuddy project create --name "Example Project" --scope "example.com,*.example.com"
-
 # Create a project from a bug bounty platform
 zerodaybuddy project create --platform hackerone --program example-program
 ```
@@ -63,23 +83,11 @@ zerodaybuddy project create --platform hackerone --program example-program
 ```bash
 # List all projects
 zerodaybuddy project list
-
-# Show detailed information about a specific project
-zerodaybuddy project info --name "Example Project"
 ```
 
 ### Managing Project Scope
 
-```bash
-# Add domains to scope
-zerodaybuddy project scope add --name "Example Project" --domains "api.example.com,admin.example.com"
-
-# Remove domains from scope
-zerodaybuddy project scope remove --name "Example Project" --domains "test.example.com"
-
-# Import scope from file
-zerodaybuddy project scope import --name "Example Project" --file scope.txt
-```
+Project scope is automatically configured when creating projects from bug bounty platforms. Manual scope management commands are planned for future releases.
 
 ## Reconnaissance
 
@@ -87,27 +95,15 @@ zerodaybuddy project scope import --name "Example Project" --file scope.txt
 
 ```bash
 # Run full reconnaissance on a project
-zerodaybuddy recon run --project "Example Project"
+zerodaybuddy recon run --project example-program
 
-# Run specific recon modules
-zerodaybuddy recon run --project "Example Project" --modules subdomain,port-scan
-
-# Resume a previous recon session
-zerodaybuddy recon resume --project "Example Project" --session 12345
+# Control concurrency
+zerodaybuddy recon run --project example-program --concurrent 5
 ```
 
 ### Viewing Reconnaissance Results
 
-```bash
-# List discovered hosts
-zerodaybuddy recon hosts --project "Example Project"
-
-# List discovered endpoints
-zerodaybuddy recon endpoints --project "Example Project" --host "api.example.com"
-
-# Export recon results
-zerodaybuddy recon export --project "Example Project" --format json --output recon-results.json
-```
+Use the web interface (`zerodaybuddy serve`) to view reconnaissance results, or check the SQLite database directly. Command-line result viewing is planned for future releases.
 
 ## Scanning
 
@@ -115,27 +111,18 @@ zerodaybuddy recon export --project "Example Project" --format json --output rec
 
 ```bash
 # Run all scanners on a project
-zerodaybuddy scan run --project "Example Project"
+zerodaybuddy scan run --project example-program
 
-# Run specific scanners
-zerodaybuddy scan run --project "Example Project" --scanners xss,sqli,ssrf
+# Scan specific target
+zerodaybuddy scan run --project example-program --target "https://api.example.com"
 
-# Scan specific targets
-zerodaybuddy scan run --project "Example Project" --targets "api.example.com:443"
+# Control concurrency
+zerodaybuddy scan run --project example-program --concurrent 3
 ```
 
 ### Managing Findings
 
-```bash
-# List all findings
-zerodaybuddy finding list --project "Example Project"
-
-# Show details of a specific finding
-zerodaybuddy finding info --id "f8d2e3a1-b6c7-4e5d-9f0a-1b2c3d4e5f6a"
-
-# Update a finding
-zerodaybuddy finding update --id "f8d2e3a1-b6c7-4e5d-9f0a-1b2c3d4e5f6a" --status confirmed
-```
+Use the web interface (`zerodaybuddy serve`) to view and manage findings. Command-line finding management is planned for future releases.
 
 ## Report Generation
 
@@ -144,41 +131,28 @@ ZeroDayBuddy provides comprehensive report generation capabilities for both proj
 ### Generating Project Reports
 
 ```bash
-# Generate a project report
-zerodaybuddy report generate --project "Example Project" --format pdf
+# Generate a project report (markdown format, default)
+zerodaybuddy report generate --project example-program
+
+# Generate PDF report
+zerodaybuddy report generate --project example-program --format pdf
 
 # Specify output file
-zerodaybuddy report generate --project "Example Project" --format pdf --output "/path/to/report.pdf"
-
-# Include additional metadata
-zerodaybuddy report generate --project "Example Project" --format pdf --include-metadata
+zerodaybuddy report generate --project example-program --format pdf --output report.pdf
 ```
 
 ### Generating Finding Reports
 
 ```bash
 # Generate a report for a specific finding
-zerodaybuddy report generate --finding "f8d2e3a1-b6c7-4e5d-9f0a-1b2c3d4e5f6a" --format pdf
-
-# Customize finding report
-zerodaybuddy report generate --finding "f8d2e3a1-b6c7-4e5d-9f0a-1b2c3d4e5f6a" --format pdf --template "detailed"
+zerodaybuddy report generate --project example-program --finding "f8d2e3a1-b6c7-4e5d-9f0a-1b2c3d4e5f6a" --format pdf
 ```
 
 ### Report Formats
 
 ZeroDayBuddy supports multiple report formats:
+- `markdown`: Markdown format for easy version control and editing (default)
 - `pdf`: Professional PDF reports suitable for client delivery
-- `md`: Markdown format for easy version control and editing
-- `html`: HTML reports for web viewing
-- `json`: JSON format for programmatic processing
-
-### Report Templates
-
-Several report templates are available:
-- `standard`: A balanced report with all essential information
-- `detailed`: Comprehensive report with extensive technical details
-- `executive`: Executive summary focused on business impact
-- `submission`: Formatted specifically for bug bounty platform submission
 
 ## Web Interface
 
@@ -193,8 +167,8 @@ zerodaybuddy serve
 # Specify a custom port
 zerodaybuddy serve --port 9000
 
-# Bind to specific address
-zerodaybuddy serve --address 127.0.0.1 --port 9000
+# Bind to specific host
+zerodaybuddy serve --host 127.0.0.1 --port 9000
 ```
 
 ### Web Interface Features
@@ -226,11 +200,8 @@ Failure to follow these guidelines could result in legal consequences and damage
 #### Database Connection Problems
 
 ```bash
-# Verify database integrity
-zerodaybuddy db check
-
-# Repair database
-zerodaybuddy db repair
+# Run database migrations if needed
+zerodaybuddy migrate up
 ```
 
 #### Scan Failures
@@ -243,13 +214,7 @@ If scans are failing, check:
 
 #### Permission Issues
 
-```bash
-# Check for permission issues
-zerodaybuddy doctor
-
-# Fix permissions
-zerodaybuddy doctor --fix
-```
+Check file permissions for the config directory (`~/.zerodaybuddy/`) and database file.
 
 ### Getting Help
 
