@@ -53,20 +53,20 @@ type CreateUserRequest struct {
 	Username string   `json:"username" validate:"required,min=3,max=50"`
 	Email    string   `json:"email" validate:"required,email"`
 	FullName string   `json:"full_name" validate:"required,min=2,max=100"`
-	Password string   `json:"password" validate:"required,min=8"`
+	Password string   `json:"-" validate:"required,min=8"` // Never log passwords
 	Role     UserRole `json:"role,omitempty"`
 }
 
 // LoginRequest represents a login request
 type LoginRequest struct {
 	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
+	Password string `json:"-" validate:"required"` // Never log passwords
 }
 
 // ChangePasswordRequest represents a password change request
 type ChangePasswordRequest struct {
-	CurrentPassword string `json:"current_password" validate:"required"`
-	NewPassword     string `json:"new_password" validate:"required,min=8"`
+	CurrentPassword string `json:"-" validate:"required"`        // Never log passwords
+	NewPassword     string `json:"-" validate:"required,min=8"`  // Never log passwords
 }
 
 // AuthResponse represents an authentication response

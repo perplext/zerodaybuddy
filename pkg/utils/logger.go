@@ -388,3 +388,66 @@ func (l *Logger) GetLevel() LogLevel {
 func (l *Logger) IsLevelEnabled(level LogLevel) bool {
 	return level >= l.config.Level
 }
+
+// LogSecure logs an object with sensitive data masked
+// This method will mask common sensitive field names
+func (l *Logger) LogSecure(level LogLevel, message string, obj interface{}) {
+	if level < l.config.Level {
+		return
+	}
+	
+	// Convert to JSON, then mask sensitive fields
+	jsonBytes, err := json.Marshal(obj)
+	if err != nil {
+		l.Error("Failed to marshal object for secure logging: %v", err)
+		return
+	}
+	
+	// Parse as generic map to mask sensitive fields
+	var data map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		l.Error("Failed to unmarshal object for secure logging: %v", err)
+		return
+	}
+	
+	// Mask sensitive fields
+	maskSensitiveFields(data)
+	
+	// Re-marshal masked data
+	maskedBytes, err := json.Marshal(data)
+	if err != nil {
+		l.Error("Failed to marshal masked object: %v", err)
+		return
+	}
+	
+	// Log the masked version
+	l.log(level, "%s: %s", message, string(maskedBytes))
+}
+
+// maskSensitiveFields recursively masks sensitive data in a map
+func maskSensitiveFields(data map[string]interface{}) {
+	sensitiveFields := []string{
+		"password", "Password", "PASSWORD",
+		"secret", "Secret", "SECRET",
+		"token", "Token", "TOKEN",
+		"key", "Key", "KEY",
+		"credential", "Credential", "CREDENTIAL",
+		"current_password", "new_password",
+		"CurrentPassword", "NewPassword",
+	}
+	
+	for key, value := range data {
+		// Check if this field should be masked
+		for _, sensitive := range sensitiveFields {
+			if key == sensitive {
+				data[key] = "[REDACTED]"
+				break
+			}
+		}
+		
+		// Recursively handle nested objects
+		if nested, ok := value.(map[string]interface{}); ok {
+			maskSensitiveFields(nested)
+		}
+	}
+}
