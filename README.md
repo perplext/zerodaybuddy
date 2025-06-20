@@ -15,7 +15,7 @@ ZeroDayBuddy is a comprehensive bug bounty assistant tool that streamlines the p
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/zerodaybuddy.git
+git clone https://github.com/perplext/zerodaybuddy.git
 cd zerodaybuddy
 
 # Build the tool

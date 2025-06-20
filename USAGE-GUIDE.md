@@ -19,7 +19,7 @@ This document provides detailed instructions on how to use ZeroDayBuddy for bug 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/zerodaybuddy.git
+git clone https://github.com/perplext/zerodaybuddy.git
 cd zerodaybuddy
 
 # Build the tool
