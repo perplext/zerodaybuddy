@@ -152,7 +152,10 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 			// Parse status code
 			statusCode := 0
 			if row[2] != "" {
-				fmt.Sscanf(row[2], "%d", &statusCode)
+				if _, err := fmt.Sscanf(row[2], "%d", &statusCode); err != nil {
+					// If parsing fails, keep statusCode as 0 and continue
+					statusCode = 0
+				}
 			}
 
 			// Parse timestamp
@@ -167,7 +170,10 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 			// Parse content length
 			contentLength := 0
 			if row[4] != "" {
-				fmt.Sscanf(row[4], "%d", &contentLength)
+				if _, err := fmt.Sscanf(row[4], "%d", &contentLength); err != nil {
+					// If parsing fails, keep contentLength as 0 and continue
+					contentLength = 0
+				}
 			}
 
 			// Only include URLs that are in scope

@@ -54,7 +54,11 @@ func TestServer_HealthEndpoint(t *testing.T) {
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
-	defer server.Shutdown(ctx)
+	defer func() {
+		if err := server.Shutdown(ctx); err != nil {
+			t.Logf("Failed to shutdown server: %v", err)
+		}
+	}()
 
 	// Wait a moment for server to start
 	time.Sleep(10 * time.Millisecond)
@@ -74,7 +78,11 @@ func TestServer_RootEndpoint(t *testing.T) {
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
-	defer server.Shutdown(ctx)
+	defer func() {
+		if err := server.Shutdown(ctx); err != nil {
+			t.Logf("Failed to shutdown server: %v", err)
+		}
+	}()
 
 	// Wait a moment for server to start
 	time.Sleep(10 * time.Millisecond)
@@ -150,7 +158,11 @@ func TestServer_TimeoutConfiguration(t *testing.T) {
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
-	defer server.Shutdown(ctx)
+	defer func() {
+		if err := server.Shutdown(ctx); err != nil {
+			t.Logf("Failed to shutdown server: %v", err)
+		}
+	}()
 
 	// Check timeout configuration
 	assert.Equal(t, 15*time.Second, server.server.ReadTimeout)

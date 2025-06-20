@@ -43,7 +43,10 @@ func (s *Server) Start(ctx context.Context, host string, port int) error {
 	// Add a simple health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			// Log error but don't fail the handler
+			s.logger.Error("Failed to write health check response: %v", err)
+		}
 	})
 	
 	// Add a basic welcome page
@@ -54,7 +57,10 @@ func (s *Server) Start(ctx context.Context, host string, port int) error {
 		}
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("<html><body><h1>ZeroDayBuddy</h1><p>Welcome to ZeroDayBuddy - the bug bounty management tool.</p></body></html>"))
+		if _, err := w.Write([]byte("<html><body><h1>ZeroDayBuddy</h1><p>Welcome to ZeroDayBuddy - the bug bounty management tool.</p></body></html>")); err != nil {
+			// Log error but don't fail the handler
+			s.logger.Error("Failed to write welcome page response: %v", err)
+		}
 	})
 	
 	s.server = &http.Server{
