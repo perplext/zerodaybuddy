@@ -5,7 +5,7 @@
 *.so
 *.dylib
 bugbase
-zerodaybuddy
+/zerodaybuddy
 
 # Test binary, built with `go test -c`
 *.test
