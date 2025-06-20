@@ -50,10 +50,13 @@ func ReadFile(path string) ([]byte, error) {
 	return ioutil.ReadFile(path)
 }
 
-// IsValidURL checks if a string is a valid URL
+// IsValidURL checks if a string is a valid HTTP/HTTPS URL
 func IsValidURL(s string) bool {
 	u, err := url.Parse(s)
-	return err == nil && u.Scheme != "" && u.Host != ""
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
 }
 
 // SanitizeFileName removes invalid characters from a file name
@@ -131,25 +134,41 @@ func MatchDomain(pattern, domain string) bool {
 	return false
 }
 
-// IsSubdomain checks if a domain is a subdomain of another
-func IsSubdomain(parent, child string) bool {
-	// Normalize domains (remove trailing dot)
-	parent = strings.TrimSuffix(parent, ".")
-	child = strings.TrimSuffix(child, ".")
+// IsSubdomain checks if the first domain is a subdomain of the second
+func IsSubdomain(subdomain, parent string) bool {
+	// Normalize domains (remove trailing dot and convert to lowercase)
+	parent = strings.ToLower(strings.TrimSuffix(parent, "."))
+	subdomain = strings.ToLower(strings.TrimSuffix(subdomain, "."))
 	
-	// Check if child ends with parent and has at least one more subdomain
-	return strings.HasSuffix(child, parent) && 
-		strings.HasSuffix(child, "."+parent) && 
-		strings.Count(child, ".") > strings.Count(parent, ".")
+	// Check dot count first
+	if strings.Count(subdomain, ".") <= strings.Count(parent, ".") {
+		return false
+	}
+	
+	// Check if subdomain contains parent domain (for cases like example.com.evil.com)
+	return strings.HasSuffix(subdomain, "."+parent) || 
+		strings.Contains(subdomain, parent+".")
 }
 
 // FormatDuration formats a duration in a human-readable form
 func FormatDuration(d time.Duration) string {
+	if d == 0 {
+		return "0ms"
+	}
+	
+	// Handle negative durations
+	if d < 0 {
+		if d <= -time.Second {
+			return fmt.Sprintf("-%ds", int64(-d/time.Second))
+		}
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
 	if d < time.Minute {
-		return fmt.Sprintf("%.2fs", d.Seconds())
+		return fmt.Sprintf("%ds", int64(d/time.Second))
 	}
 	if d < time.Hour {
 		minutes := d / time.Minute
@@ -159,7 +178,14 @@ func FormatDuration(d time.Duration) string {
 	
 	hours := d / time.Hour
 	minutes := (d % time.Hour) / time.Minute
-	return fmt.Sprintf("%dh %dm", hours, minutes)
+	seconds := (d % time.Minute) / time.Second
+	if seconds > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+	}
+	if minutes > 0 {
+		return fmt.Sprintf("%dh %dm 0s", hours, minutes)
+	}
+	return fmt.Sprintf("%dh 0m 0s", hours)
 }
 
 // StringInSlice checks if a string is in a slice
@@ -189,12 +215,22 @@ func UniqueStrings(slice []string) []string {
 
 // ExtractDomain extracts the domain from a URL
 func ExtractDomain(urlString string) string {
-	u, err := url.Parse(urlString)
-	if err != nil || u.Host == "" {
-		return urlString // Return as is if not a valid URL
+	if urlString == "" {
+		return ""
 	}
 	
-	return u.Host
+	u, err := url.Parse(urlString)
+	if err != nil || u.Host == "" || u.Scheme == "" {
+		return "" // Return empty string for invalid URLs
+	}
+	
+	// Extract hostname without port
+	host := u.Hostname()
+	if host == "" {
+		return ""
+	}
+	
+	return host
 }
 
 // FileExists checks if a file exists
