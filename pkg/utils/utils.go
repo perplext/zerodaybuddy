@@ -61,12 +61,27 @@ func IsValidURL(s string) bool {
 
 // SanitizeFileName removes invalid characters from a file name
 func SanitizeFileName(name string) string {
-	// Replace characters that are not valid in file names
-	invalid := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
-	result := name
+	if name == "" {
+		return ""
+	}
 	
-	for _, char := range invalid {
-		result = strings.ReplaceAll(result, char, "_")
+	result := ""
+	for _, char := range name {
+		switch {
+		case char >= 'a' && char <= 'z':
+			result += string(char)
+		case char >= 'A' && char <= 'Z':
+			result += string(char)
+		case char >= '0' && char <= '9':
+			result += string(char)
+		case char == '.' || char == '-':
+			result += string(char)
+		case char == '_':
+			result += string(char)
+		default:
+			// Replace any other character (including spaces and special chars) with underscore
+			result += "_"
+		}
 	}
 	
 	return result

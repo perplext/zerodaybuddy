@@ -49,24 +49,27 @@ type Session struct {
 }
 
 // CreateUserRequest represents a request to create a new user
+// Note: Password field accepts JSON input but should never be logged directly
 type CreateUserRequest struct {
 	Username string   `json:"username" validate:"required,min=3,max=50"`
 	Email    string   `json:"email" validate:"required,email"`
 	FullName string   `json:"full_name" validate:"required,min=2,max=100"`
-	Password string   `json:"-" validate:"required,min=8"` // Never log passwords
+	Password string   `json:"password" validate:"required,min=8"`
 	Role     UserRole `json:"role,omitempty"`
 }
 
 // LoginRequest represents a login request
+// Note: Password field accepts JSON input but should never be logged directly
 type LoginRequest struct {
 	Username string `json:"username" validate:"required"`
-	Password string `json:"-" validate:"required"` // Never log passwords
+	Password string `json:"password" validate:"required"`
 }
 
 // ChangePasswordRequest represents a password change request
+// Note: Password fields accept JSON input but should never be logged directly
 type ChangePasswordRequest struct {
-	CurrentPassword string `json:"-" validate:"required"`        // Never log passwords
-	NewPassword     string `json:"-" validate:"required,min=8"`  // Never log passwords
+	CurrentPassword string `json:"current_password" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
 }
 
 // AuthResponse represents an authentication response

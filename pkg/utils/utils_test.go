@@ -134,7 +134,7 @@ func TestSanitizeFileName(t *testing.T) {
 		{"with dots", "test.file.txt", "test.file.txt"},
 		{"with dashes", "test-file", "test-file"},
 		{"with underscores", "test_file", "test_file"},
-		{"with special chars", "test@#$%file", "test_____file"},
+		{"with special chars", "test@#$%file", "test____file"},
 		{"multiple spaces", "test   file", "test___file"},
 		{"leading trailing spaces", "  test  ", "__test__"},
 		{"empty string", "", ""},
