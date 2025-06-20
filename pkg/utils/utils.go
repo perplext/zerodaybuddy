@@ -99,8 +99,14 @@ func GenerateSlug(s string) string {
 	return result
 }
 
-// IsInScope checks if a domain is in scope
-func IsInScope(domain string, inScope []string, outOfScope []string) bool {
+// IsInScope checks if a URL's domain is in scope
+func IsInScope(urlOrDomain string, inScope []string, outOfScope []string) bool {
+	// Extract domain from URL if needed
+	domain := ExtractDomain(urlOrDomain)
+	if domain == "" {
+		domain = urlOrDomain // Fallback to treating as domain directly
+	}
+	
 	// Check if domain is explicitly out of scope
 	for _, d := range outOfScope {
 		if MatchDomain(d, domain) {
@@ -120,6 +126,10 @@ func IsInScope(domain string, inScope []string, outOfScope []string) bool {
 
 // MatchDomain checks if a domain matches a pattern (including wildcards)
 func MatchDomain(pattern, domain string) bool {
+	// Normalize case for comparison
+	pattern = strings.ToLower(pattern)
+	domain = strings.ToLower(domain)
+	
 	// Exact match
 	if pattern == domain {
 		return true
