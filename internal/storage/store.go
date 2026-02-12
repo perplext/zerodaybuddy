@@ -305,11 +305,11 @@ func (s *SQLiteStore) CreateProject(ctx context.Context, project *models.Project
 	// Insert project
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO projects (
-			id, name, handle, platform, description, start_date, end_date, 
+			id, name, handle, platform, project_type, description, start_date, end_date, 
 			status, scope_json, notes, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		project.ID, project.Name, project.Handle, project.Platform, project.Description,
+		project.ID, project.Name, project.Handle, project.Platform, project.Type, project.Description,
 		project.StartDate, project.EndDate, project.Status, scopeJSON, project.Notes,
 		project.CreatedAt, project.UpdatedAt,
 	)
@@ -334,12 +334,12 @@ func (s *SQLiteStore) GetProject(ctx context.Context, id string) (*models.Projec
 	
 	err := s.db.QueryRowContext(ctx, `
 		SELECT 
-			id, name, handle, platform, description, start_date, end_date, 
+			id, name, handle, platform, project_type, description, start_date, end_date, 
 			status, scope_json, notes, created_at, updated_at
 		FROM projects
 		WHERE id = ?
 	`, id).Scan(
-		&project.ID, &project.Name, &project.Handle, &project.Platform, &project.Description,
+		&project.ID, &project.Name, &project.Handle, &project.Platform, &project.Type, &project.Description,
 		&project.StartDate, &project.EndDate, &project.Status, &scopeJSON, &project.Notes,
 		&project.CreatedAt, &project.UpdatedAt,
 	)
@@ -363,12 +363,12 @@ func (s *SQLiteStore) GetProjectByName(ctx context.Context, name string) (*model
 	
 	err := s.db.QueryRowContext(ctx, `
 		SELECT 
-			id, name, handle, platform, description, start_date, end_date, 
+			id, name, handle, platform, project_type, description, start_date, end_date, 
 			status, scope_json, notes, created_at, updated_at
 		FROM projects
 		WHERE name = ?
 	`, name).Scan(
-		&project.ID, &project.Name, &project.Handle, &project.Platform, &project.Description,
+		&project.ID, &project.Name, &project.Handle, &project.Platform, &project.Type, &project.Description,
 		&project.StartDate, &project.EndDate, &project.Status, &scopeJSON, &project.Notes,
 		&project.CreatedAt, &project.UpdatedAt,
 	)
@@ -400,11 +400,11 @@ func (s *SQLiteStore) UpdateProject(ctx context.Context, project *models.Project
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE projects
 		SET 
-			name = ?, handle = ?, platform = ?, description = ?, start_date = ?, 
+			name = ?, handle = ?, platform = ?, project_type = ?, description = ?, start_date = ?, 
 			end_date = ?, status = ?, scope_json = ?, notes = ?, updated_at = ?
 		WHERE id = ?
 	`,
-		project.Name, project.Handle, project.Platform, project.Description, project.StartDate,
+		project.Name, project.Handle, project.Platform, project.Type, project.Description, project.StartDate,
 		project.EndDate, project.Status, scopeJSON, project.Notes, project.UpdatedAt, project.ID,
 	)
 	
@@ -419,7 +419,7 @@ func (s *SQLiteStore) UpdateProject(ctx context.Context, project *models.Project
 func (s *SQLiteStore) ListProjects(ctx context.Context) ([]*models.Project, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT 
-			id, name, handle, platform, description, start_date, end_date, 
+			id, name, handle, platform, project_type, description, start_date, end_date, 
 			status, scope_json, notes, created_at, updated_at
 		FROM projects
 		ORDER BY created_at DESC
@@ -435,7 +435,7 @@ func (s *SQLiteStore) ListProjects(ctx context.Context) ([]*models.Project, erro
 		var scopeJSON string
 		
 		err := rows.Scan(
-			&project.ID, &project.Name, &project.Handle, &project.Platform, &project.Description,
+			&project.ID, &project.Name, &project.Handle, &project.Platform, &project.Type, &project.Description,
 			&project.StartDate, &project.EndDate, &project.Status, &scopeJSON, &project.Notes,
 			&project.CreatedAt, &project.UpdatedAt,
 		)

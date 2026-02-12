@@ -17,6 +17,16 @@ const (
 	AssetTypeOther   AssetType = "other"
 )
 
+// ProjectType represents the type of a project
+type ProjectType string
+
+const (
+	ProjectTypeBugBounty ProjectType = "bug-bounty"
+	ProjectTypeVDP       ProjectType = "vdp"        // Vulnerability Disclosure Program
+	ProjectTypeResearch  ProjectType = "research"   // Personal security research
+	ProjectTypePentest   ProjectType = "pentest"    // Client penetration testing
+)
+
 // ProjectStatus represents the status of a project
 type ProjectStatus string
 
@@ -69,9 +79,10 @@ type Project struct {
 	Name        string        `json:"name"`
 	Handle      string        `json:"handle"`
 	Platform    string        `json:"platform"`
+	Type        ProjectType   `json:"type"`
 	Description string        `json:"description"`
 	StartDate   time.Time     `json:"start_date"`
-	EndDate     time.Time     `json:"end_date,omitempty"`
+	EndDate     *time.Time    `json:"end_date,omitempty"`
 	Status      ProjectStatus `json:"status"`
 	Scope       Scope         `json:"scope"`
 	Notes       string        `json:"notes"`

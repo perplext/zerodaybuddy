@@ -117,8 +117,20 @@ func (a *App) GetAuthService() *auth.Service {
 	return a.authSvc
 }
 
+// ensureInitialized checks if the app is initialized and initializes it if needed
+func (a *App) ensureInitialized(ctx context.Context) error {
+	if a.store == nil {
+		return a.Initialize(ctx)
+	}
+	return nil
+}
+
 // ListPrograms lists available bug bounty programs
 func (a *App) ListPrograms(ctx context.Context, platformName string) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	if platformName == "" {
 		// List programs from all platforms
 		for name, p := range a.platforms {
@@ -160,6 +172,10 @@ func (a *App) ListPrograms(ctx context.Context, platformName string) error {
 
 // CreateProject creates a new bug bounty project
 func (a *App) CreateProject(ctx context.Context, platformName, programHandle string) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	p, ok := a.platforms[platformName]
 	if !ok {
 		return pkgerrors.ValidationError("unknown platform: %s", platformName).
@@ -179,6 +195,7 @@ func (a *App) CreateProject(ctx context.Context, platformName, programHandle str
 		Name:      program.Name,
 		Handle:    program.Handle,
 		Platform:  platformName,
+		Type:      models.ProjectTypeBugBounty,
 		StartDate: utils.CurrentTime(),
 		Status:    models.ProjectStatusActive,
 		Scope:     program.Scope,
@@ -198,6 +215,10 @@ func (a *App) CreateProject(ctx context.Context, platformName, programHandle str
 
 // ListProjects lists all bug bounty projects
 func (a *App) ListProjects(ctx context.Context) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	projects, err := a.store.ListProjects(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list projects: %w", err)
@@ -214,6 +235,10 @@ func (a *App) ListProjects(ctx context.Context) error {
 
 // RunRecon runs reconnaissance on a project
 func (a *App) RunRecon(ctx context.Context, projectName string, concurrent int) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	project, err := a.store.GetProjectByName(ctx, projectName)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
@@ -251,6 +276,10 @@ func (a *App) RunRecon(ctx context.Context, projectName string, concurrent int) 
 
 // RunScan runs vulnerability scanning on a project
 func (a *App) RunScan(ctx context.Context, projectName, target string, concurrent int) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	project, err := a.store.GetProjectByName(ctx, projectName)
 	if err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
@@ -294,6 +323,10 @@ func (a *App) RunScan(ctx context.Context, projectName, target string, concurren
 
 // GenerateReport generates a vulnerability report
 func (a *App) GenerateReport(ctx context.Context, projectName, findingID, format, output string) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	project, err := a.store.GetProjectByName(ctx, projectName)
 	if err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
@@ -352,6 +385,10 @@ func (a *App) GenerateReport(ctx context.Context, projectName, findingID, format
 
 // Serve starts the web server
 func (a *App) Serve(ctx context.Context, host string, port int) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+	
 	a.logger.Info("Starting web server on %s:%d", host, port)
 	
 	// Ensure services are initialized
@@ -368,7 +405,18 @@ func (a *App) Serve(ctx context.Context, host string, port int) error {
 	}
 	
 	// Start web server
-	return a.webSvc.Start(ctx, a.config.WebServer.Host, a.config.WebServer.Port)
+	if err := a.webSvc.Start(ctx, a.config.WebServer.Host, a.config.WebServer.Port); err != nil {
+		return err
+	}
+	
+	// Block until context is cancelled
+	<-ctx.Done()
+	
+	// Shutdown the server
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	return a.webSvc.Shutdown(shutdownCtx)
 }
 
 // GetConfig returns the application configuration

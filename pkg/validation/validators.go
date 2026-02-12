@@ -148,8 +148,9 @@ func APIKey(key string, platform string) error {
 	
 	switch platform {
 	case "hackerone":
-		if !hackeroneAPIKeyRegex.MatchString(key) {
-			return fmt.Errorf("%w: HackerOne API key must be at least 40 alphanumeric characters", ErrInvalidAPIKey)
+		// Allow base64 encoded keys and other formats
+		if len(key) < 20 {
+			return fmt.Errorf("%w: must be at least 40 characters for HackerOne", ErrInvalidAPIKey)
 		}
 	case "bugcrowd":
 		// Bugcrowd uses session cookies, so just check length

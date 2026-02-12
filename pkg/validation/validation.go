@@ -37,10 +37,13 @@ var (
 )
 
 // ValidPlatforms contains the list of supported bug bounty platforms
-var ValidPlatforms = []string{"hackerone", "bugcrowd"}
+var ValidPlatforms = []string{"hackerone", "bugcrowd", "manual"}
 
 // ValidReportFormats contains the list of supported report formats
 var ValidReportFormats = []string{"markdown", "pdf"}
+
+// ValidProjectTypes contains the list of supported project types
+var ValidProjectTypes = []string{"bug-bounty", "vdp", "research", "pentest"}
 
 // Platform validates a bug bounty platform string
 func Platform(platform string) error {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -78,7 +79,7 @@ func NewHackerOneWithRateLimiter(cfg config.HackerOneConfig, logger *utils.Logge
 func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) {
 	h.logger.Debug("Listing HackerOne programs")
 	
-	if h.config.APIKey == "" || h.config.Username == "" {
+	if h.config.APIKey == "" {
 		return nil, fmt.Errorf("HackerOne API credentials not configured")
 	}
 	
@@ -93,8 +94,9 @@ func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) 
 	
 	// Set headers
 	req.Header.Set("Accept", "application/json")
+	// For hacker API tokens, the token is used as both username and password
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", 
-		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.Username, h.config.APIKey)))))
+		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.APIKey, h.config.APIKey)))))
 	
 	// Send request
 	resp, err := h.client.Do(ctx, req)
@@ -105,7 +107,11 @@ func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) 
 	
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+		}
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 	
 	// Parse response
@@ -170,8 +176,9 @@ func (h *HackerOne) GetProgram(ctx context.Context, handle string) (*models.Prog
 	
 	// Set headers
 	req.Header.Set("Accept", "application/json")
+	// For hacker API tokens, the token is used as both username and password
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", 
-		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.Username, h.config.APIKey)))))
+		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.APIKey, h.config.APIKey)))))
 	
 	// Send request
 	resp, err := h.client.Do(ctx, req)
@@ -182,7 +189,11 @@ func (h *HackerOne) GetProgram(ctx context.Context, handle string) (*models.Prog
 	
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+		}
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 	
 	// Parse response
@@ -252,8 +263,9 @@ func (h *HackerOne) FetchScope(ctx context.Context, handle string) (*models.Scop
 	
 	// Set headers
 	req.Header.Set("Accept", "application/json")
+	// For hacker API tokens, the token is used as both username and password
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", 
-		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.Username, h.config.APIKey)))))
+		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.APIKey, h.config.APIKey)))))
 	
 	// Send request
 	resp, err := h.client.Do(ctx, req)
@@ -264,7 +276,11 @@ func (h *HackerOne) FetchScope(ctx context.Context, handle string) (*models.Scop
 	
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+		}
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 	
 	// Parse response
