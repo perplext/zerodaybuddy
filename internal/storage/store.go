@@ -68,6 +68,11 @@ type Store interface {
 	ListReports(ctx context.Context, projectID string) ([]*models.Report, error)
 	DeleteReport(ctx context.Context, id string) error
 	
+	// Bulk methods
+	BulkCreateHosts(ctx context.Context, hosts []*models.Host) error
+	BulkCreateEndpoints(ctx context.Context, endpoints []*models.Endpoint) error
+	BulkCreateFindings(ctx context.Context, findings []*models.Finding) error
+
 	// Close closes the database connection
 	Close() error
 }

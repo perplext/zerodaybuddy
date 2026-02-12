@@ -156,6 +156,33 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	}
 	args = append(args, "-severity", severityLevel)
 
+	// DAST/fuzzing mode flags
+	if opts.DAST {
+		args = append(args, "-dast")
+		s.logger.Debug("DAST fuzzing mode enabled")
+	}
+	if opts.InputMode != "" {
+		if validated, err := validateNucleiInputMode(opts.InputMode); err != nil {
+			return nil, fmt.Errorf("invalid input-mode option: %w", err)
+		} else {
+			args = append(args, "-input-mode", validated)
+		}
+	}
+	if opts.FuzzingType != "" {
+		if validated, err := validateNucleiFuzzingType(opts.FuzzingType); err != nil {
+			return nil, fmt.Errorf("invalid fuzzing-type option: %w", err)
+		} else {
+			args = append(args, "-fuzzing-type", validated)
+		}
+	}
+	if opts.FuzzingMode != "" {
+		if validated, err := validateNucleiFuzzingMode(opts.FuzzingMode); err != nil {
+			return nil, fmt.Errorf("invalid fuzzing-mode option: %w", err)
+		} else {
+			args = append(args, "-fuzzing-mode", validated)
+		}
+	}
+
 	// Execute the command
 	s.logger.Debug("Running Nuclei with args: %v", args)
 	cmd := exec.CommandContext(ctx, nucleiPath, args...)
@@ -282,6 +309,48 @@ func validateNucleiTemplates(templates string) (string, error) {
 		return "", fmt.Errorf("no valid template categories specified")
 	}
 	return strings.Join(valid, ","), nil
+}
+
+// allowedNucleiInputModes is the set of valid nuclei input modes.
+var allowedNucleiInputModes = map[string]bool{
+	"openapi": true, "burp": true, "swagger": true, "jsonl": true,
+}
+
+// allowedNucleiFuzzingTypes is the set of valid nuclei fuzzing types.
+var allowedNucleiFuzzingTypes = map[string]bool{
+	"replace": true, "prefix": true, "postfix": true, "infix": true,
+}
+
+// allowedNucleiFuzzingModes is the set of valid nuclei fuzzing modes.
+var allowedNucleiFuzzingModes = map[string]bool{
+	"multiple": true, "single": true,
+}
+
+// validateNucleiInputMode validates an input mode value.
+func validateNucleiInputMode(mode string) (string, error) {
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if !allowedNucleiInputModes[mode] {
+		return "", fmt.Errorf("unknown input mode %q", mode)
+	}
+	return mode, nil
+}
+
+// validateNucleiFuzzingType validates a fuzzing type value.
+func validateNucleiFuzzingType(ft string) (string, error) {
+	ft = strings.TrimSpace(strings.ToLower(ft))
+	if !allowedNucleiFuzzingTypes[ft] {
+		return "", fmt.Errorf("unknown fuzzing type %q", ft)
+	}
+	return ft, nil
+}
+
+// validateNucleiFuzzingMode validates a fuzzing mode value.
+func validateNucleiFuzzingMode(fm string) (string, error) {
+	fm = strings.TrimSpace(strings.ToLower(fm))
+	if !allowedNucleiFuzzingModes[fm] {
+		return "", fmt.Errorf("unknown fuzzing mode %q", fm)
+	}
+	return fm, nil
 }
 
 // validateNucleiSeverity validates a comma-separated list of severity levels.

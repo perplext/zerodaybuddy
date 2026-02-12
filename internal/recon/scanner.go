@@ -8,10 +8,14 @@ import (
 
 // ScanOptions provides type-safe scanner configuration.
 type ScanOptions struct {
-	Templates string
-	Severity  string
-	Wordlist  string
-	Extra     map[string]interface{}
+	Templates   string
+	Severity    string
+	Wordlist    string
+	DAST        bool   // Enable DAST/fuzzing mode (Nuclei)
+	InputMode   string // e.g. "openapi" for Nuclei API schema import
+	FuzzingType string // replace, prefix, postfix, infix
+	FuzzingMode string // multiple, single
+	Extra       map[string]interface{}
 }
 
 // ScannerMeta provides common metadata for all scanners.

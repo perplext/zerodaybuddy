@@ -485,9 +485,9 @@ func (r *ScannerRegistry) Register(scanner ScannerMeta) {
 - [x] GoReleaser produces binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
 - [x] Release includes CycloneDX SBOM and Cosign signature
 - [x] Scanner interface uses typed returns (no `interface{}`)
-- [ ] ScannerRegistry auto-categorizes by interface implementation
-- [ ] Batch INSERT methods for hosts, endpoints, and findings
-- [ ] Error string compatibility verified with integration tests
+- [x] ScannerRegistry auto-categorizes by interface implementation
+- [x] Batch INSERT methods for hosts, endpoints, and findings
+- [x] Error string compatibility verified with integration tests
 - [x] All existing tests pass after migration
 - [x] Deprecated `initDatabase()` and custom `contains()` removed
 
@@ -587,14 +587,14 @@ func (r *ScannerRegistry) Register(scanner ScannerMeta) {
 
 ### Acceptance Criteria — Phase 4
 
-- [ ] `zerodaybuddy report --format sarif` produces valid SARIF v2.1.0 JSON
-- [ ] SARIF output accepted by `gh code-scanning upload-sarif`
-- [ ] Findings store CVSS 4.0 vector strings alongside scores
-- [ ] `zerodaybuddy scan --dast` enables Nuclei fuzzing mode
-- [ ] `zerodaybuddy recon` discovers container vulnerabilities when Trivy is installed
-- [ ] Secrets detection runs as part of the recon pipeline
-- [ ] HackerOne report submission works with `--submit` flag
-- [ ] Immunefi programs can be listed and scoped
+- [x] `zerodaybuddy report --format sarif` produces valid SARIF v2.1.0 JSON
+- [x] SARIF output accepted by `gh code-scanning upload-sarif`
+- [x] Findings store CVSS 4.0 vector strings alongside scores
+- [x] `zerodaybuddy scan --dast` enables Nuclei fuzzing mode
+- [x] `zerodaybuddy recon` discovers container vulnerabilities when Trivy is installed
+- [x] Secrets detection runs as part of the recon pipeline
+- [x] HackerOne report submission works with `--submit` flag
+- [x] Immunefi programs can be listed and scoped
 
 ---
 

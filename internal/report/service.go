@@ -14,6 +14,7 @@ import (
 type ReportStore interface {
 	GetProject(ctx context.Context, id string) (*models.Project, error)
 	GetFinding(ctx context.Context, id string) (*models.Finding, error)
+	ListFindings(ctx context.Context, projectID string) ([]*models.Finding, error)
 	CreateReport(ctx context.Context, report *models.Report) (*models.Report, error)
 	GetReport(ctx context.Context, id string) (*models.Report, error)
 	ListReports(ctx context.Context, projectID string) ([]*models.Report, error)
@@ -43,13 +44,13 @@ func (s *Service) CreateReport(ctx context.Context, report *models.Report) (*mod
 		report.CreatedAt = time.Now()
 	}
 
-	// Generate report content based on whether it's for a specific finding or the whole project
+	// Generate report content based on format and scope
 	var err error
-	if report.FindingID == "" {
-		// This is a project-level report
+	if report.Format == "sarif" {
+		report.Content, err = GenerateSARIF(ctx, s.store, report.ProjectID)
+	} else if report.FindingID == "" {
 		report.Content, err = s.generateProjectReportContent(ctx, report.ProjectID, report.Format)
 	} else {
-		// This is a finding-specific report
 		report.Content, err = s.generateFindingReportContent(ctx, report.ProjectID, report.FindingID, report.Format)
 	}
 

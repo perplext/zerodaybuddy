@@ -21,7 +21,8 @@ func (d *findingScanDest) scanArgs() []interface{} {
 	return []interface{}{
 		&d.finding.ID, &d.finding.ProjectID, &d.findingType, &d.finding.Title, &d.finding.Description,
 		&d.details, &d.finding.Severity, &d.confidence, &d.finding.Status, &d.url,
-		&d.finding.CVSS, &d.finding.CWE, &d.stepsJSON, &d.evidenceJSON, &d.evidenceMapJSON, &d.metadataJSON,
+		&d.finding.CVSS, &d.finding.CVSSVector, &d.finding.CVSSVersion, &d.finding.CWE,
+		&d.stepsJSON, &d.evidenceJSON, &d.evidenceMapJSON, &d.metadataJSON,
 		&d.finding.Impact, &d.finding.Remediation, &d.referencesJSON, &d.finding.FoundBy, &d.finding.FoundAt,
 		&d.affectedAssetsJSON, &d.finding.CreatedAt, &d.finding.UpdatedAt,
 	}
@@ -81,7 +82,7 @@ func (d *findingScanDest) hydrate() (*models.Finding, error) {
 }
 
 const findingSelectCols = `id, project_id, type, title, description, details, severity, confidence, status, url,
-			cvss, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
+			cvss, cvss_vector, cvss_version, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
 			found_by, found_at, affected_assets_json, created_at, updated_at`
 
 // GetFinding retrieves a finding by ID
@@ -162,12 +163,12 @@ func (s *SQLiteStore) UpdateFinding(ctx context.Context, finding *models.Finding
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE findings SET
 			type = ?, title = ?, description = ?, details = ?, severity = ?, confidence = ?, status = ?, url = ?,
-			cvss = ?, cwe = ?, steps_json = ?, evidence_json = ?, evidence_map_json = ?, metadata_json = ?, impact = ?, remediation = ?, 
+			cvss = ?, cvss_vector = ?, cvss_version = ?, cwe = ?, steps_json = ?, evidence_json = ?, evidence_map_json = ?, metadata_json = ?, impact = ?, remediation = ?,
 			references_json = ?, found_by = ?, found_at = ?, affected_assets_json = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		finding.Type, finding.Title, finding.Description, finding.Details, finding.Severity, finding.Confidence, finding.Status, finding.URL,
-		finding.CVSS, finding.CWE, stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, finding.Impact,
+		finding.CVSS, finding.CVSSVector, finding.CVSSVersion, finding.CWE, stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, finding.Impact,
 		finding.Remediation, referencesJSON, finding.FoundBy, finding.FoundAt,
 		affectedAssetsJSON, finding.UpdatedAt, finding.ID,
 	)

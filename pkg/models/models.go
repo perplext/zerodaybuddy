@@ -15,8 +15,11 @@ const (
 	AssetTypeIP      AssetType = "ip"
 	AssetTypeURL     AssetType = "url"
 	AssetTypeMobile  AssetType = "mobile"
-	AssetTypeBinary  AssetType = "binary"
-	AssetTypeOther   AssetType = "other"
+	AssetTypeBinary         AssetType = "binary"
+	AssetTypeContainer      AssetType = "container"
+	AssetTypeSmartContract  AssetType = "smart_contract"
+	AssetTypeRepository     AssetType = "repository"
+	AssetTypeOther          AssetType = "other"
 )
 
 // ProjectType represents the type of a project
@@ -232,6 +235,8 @@ type Finding struct {
 	Status      FindingStatus  `json:"status"`
 	URL         string         `json:"url,omitempty"`
 	CVSS        float64        `json:"cvss,omitempty"`
+	CVSSVector  string         `json:"cvss_vector,omitempty"`
+	CVSSVersion string         `json:"cvss_version,omitempty"` // "3.1" or "4.0"
 	CWE         string         `json:"cwe,omitempty"`
 	Steps       []string       `json:"steps"`
 	Evidence    interface{}    `json:"evidence"` // Can be []Evidence or map[string]interface{}
