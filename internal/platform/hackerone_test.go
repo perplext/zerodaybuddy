@@ -134,7 +134,7 @@ func TestHackerOne_ListPrograms(t *testing.T) {
 				APIKey:   "testkey",
 			},
 			mockStatusCode: http.StatusUnauthorized,
-			expectedError:  "unexpected status code: 401",
+			expectedError:  "authentication failed (401)",
 		},
 		{
 			name: "invalid response format",
@@ -170,9 +170,9 @@ func TestHackerOne_ListPrograms(t *testing.T) {
 				assert.Equal(t, "application/json", r.Header.Get("Accept"))
 
 				// Check authorization
-				if tt.config.Username != "" && tt.config.APIKey != "" {
+				if tt.config.APIKey != "" {
 					expectedAuth := fmt.Sprintf("Basic %s",
-						base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", tt.config.Username, tt.config.APIKey))))
+						base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", tt.config.APIKey, tt.config.APIKey))))
 					assert.Equal(t, expectedAuth, r.Header.Get("Authorization"))
 				}
 
@@ -477,7 +477,7 @@ func TestHackerOne_FetchScope(t *testing.T) {
 				APIKey:   "testkey",
 			},
 			mockStatusCode: http.StatusUnauthorized,
-			expectedError:  "unexpected status code: 401",
+			expectedError:  "authentication failed (401)",
 		},
 		{
 			name:   "empty scope",

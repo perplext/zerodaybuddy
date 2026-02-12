@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/perplext/zerodaybuddy/internal/core"
 	"github.com/perplext/zerodaybuddy/pkg/config"
@@ -313,7 +316,21 @@ func createServeCommand(app *core.App) *cobra.Command {
 				return fmt.Errorf("invalid host: %w", err)
 			}
 			
-			return app.Serve(cmd.Context(), host, port)
+			// Create context that can be cancelled by signals
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
+			
+			// Handle interrupt signals
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+			
+			go func() {
+				<-sigChan
+				fmt.Println("\nShutting down server...")
+				cancel()
+			}()
+			
+			return app.Serve(ctx, host, port)
 		},
 	}
 

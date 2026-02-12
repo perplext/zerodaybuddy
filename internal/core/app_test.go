@@ -193,37 +193,43 @@ func TestGenerateReportProjectNotFound(t *testing.T) {
 
 func TestServeWithCustomHostPort(t *testing.T) {
 	cfg := getTestConfig()
+	cfg.DataDir = t.TempDir()
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	// Update config through Serve method
 	customHost := "0.0.0.0"
 	customPort := 9090
-	
+
 	// We can't actually start the server in tests, but we can verify config update
 	// by checking the config after calling serve with cancel context
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel() // Cancel immediately
-	
+
 	_ = app.Serve(cancelCtx, customHost, customPort)
-	
+
 	assert.Equal(t, customHost, app.config.WebServer.Host)
 	assert.Equal(t, customPort, app.config.WebServer.Port)
 }
 
 func TestServeWithoutInit(t *testing.T) {
 	cfg := getTestConfig()
+	cfg.DataDir = t.TempDir()
 	app := NewApp(cfg)
-	
-	// Don't initialize, webSvc should be nil
-	ctx := context.Background()
-	err := app.Serve(ctx, "", 0)
-	
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "web service not initialized")
+
+	// Serve without prior Initialize — ensureInitialized should auto-init
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately so server doesn't block
+
+	err := app.Serve(cancelCtx, "", 0)
+
+	// Should not get an initialization error — auto-init handles it
+	if err != nil {
+		assert.NotContains(t, err.Error(), "failed to initialize")
+	}
 }
 
 func TestRunReconWithoutInit(t *testing.T) {

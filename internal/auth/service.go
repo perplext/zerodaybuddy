@@ -94,7 +94,7 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, ipAddress, userA
 	// Verify password
 	valid, err := VerifyPassword(req.Password, user.Password)
 	if err != nil {
-		s.logger.Error("Password verification error for user %s: %v", req.Username, err)
+		s.logger.Error("Password verification error for user %s", req.Username)
 		return nil, fmt.Errorf("authentication failed")
 	}
 
@@ -232,7 +232,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	// Verify current password
 	valid, err := VerifyPassword(req.CurrentPassword, user.Password)
 	if err != nil {
-		return fmt.Errorf("password verification failed: %w", err)
+		return fmt.Errorf("password verification failed")
 	}
 
 	if !valid {
