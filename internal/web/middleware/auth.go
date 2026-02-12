@@ -9,6 +9,11 @@ import (
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 )
 
+// contextKey is a private type for context keys to prevent collisions.
+type contextKey string
+
+const userContextKey contextKey = "user"
+
 // AuthService interface for authentication operations
 type AuthService interface {
 	ValidateToken(ctx context.Context, token string) (*auth.User, error)
@@ -43,7 +48,7 @@ func AuthMiddleware(authService AuthService, logger *utils.Logger) func(http.Han
 			}
 
 			// Add user to context
-			ctx := context.WithValue(r.Context(), "user", user)
+			ctx := context.WithValue(r.Context(), userContextKey, user)
 			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
@@ -104,7 +109,7 @@ func OptionalAuth(authService AuthService, logger *utils.Logger) func(http.Handl
 			}
 
 			// Add user to context
-			ctx := context.WithValue(r.Context(), "user", user)
+			ctx := context.WithValue(r.Context(), userContextKey, user)
 			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
@@ -112,57 +117,15 @@ func OptionalAuth(authService AuthService, logger *utils.Logger) func(http.Handl
 	}
 }
 
-// CSRF middleware for CSRF protection
-func CSRF(logger *utils.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip CSRF check for GET, HEAD, OPTIONS requests
-			if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Get CSRF token from header
-			csrfToken := r.Header.Get("X-CSRF-Token")
-			if csrfToken == "" {
-				// Try to get from form data
-				csrfToken = r.FormValue("csrf_token")
-			}
-
-			if csrfToken == "" {
-				logger.Warn("CSRF token missing for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-				http.Error(w, "CSRF token required", http.StatusForbidden)
-				return
-			}
-
-			// For now, we'll implement a simple token validation
-			// In production, you'd want to validate against a session-specific token
-			if len(csrfToken) < 16 {
-				logger.Warn("Invalid CSRF token for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-				http.Error(w, "Invalid CSRF token", http.StatusForbidden)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// RateLimitMiddleware implements basic rate limiting
-func RateLimitMiddleware(requestsPerMinute int, logger *utils.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// For production, use a proper rate limiting library like golang.org/x/time/rate
-			// This is a placeholder implementation
-			
-			next.ServeHTTP(w, r)
-		})
-	}
+// ContextWithUser returns a new context carrying the given user.
+// Use this in tests to set up context the same way the middleware does.
+func ContextWithUser(ctx context.Context, user *auth.User) context.Context {
+	return context.WithValue(ctx, userContextKey, user)
 }
 
 // GetUserFromContext extracts user from request context
 func GetUserFromContext(ctx context.Context) *auth.User {
-	if user, ok := ctx.Value("user").(*auth.User); ok {
+	if user, ok := ctx.Value(userContextKey).(*auth.User); ok {
 		return user
 	}
 	return nil

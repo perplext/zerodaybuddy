@@ -250,13 +250,13 @@ tools:
   default_rate_limit: 100
 `
 
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(configFile), 0755); err != nil {
+	// Create the directory with restricted permissions (config contains API keys)
+	if err := os.MkdirAll(filepath.Dir(configFile), 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Write the default configuration
-	if err := os.WriteFile(configFile, []byte(defaultConfig), 0644); err != nil {
+	// Write the default configuration with restricted permissions
+	if err := os.WriteFile(configFile, []byte(defaultConfig), 0600); err != nil {
 		return fmt.Errorf("failed to write default config: %w", err)
 	}
 

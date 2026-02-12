@@ -68,10 +68,17 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 		ffufPath = "ffuf"
 	}
 
-	// Get wordlist path from options or use default
+	// Get wordlist path from options or use default (validate as real file path)
 	wordlist := ""
 	if options != nil {
 		if w, ok := options["wordlist"].(string); ok && w != "" {
+			// Reject values that look like flag injection
+			if strings.HasPrefix(w, "-") || strings.ContainsAny(w, ";|&`$") {
+				return nil, fmt.Errorf("invalid wordlist path: %q", w)
+			}
+			if _, err := os.Stat(w); err != nil {
+				return nil, fmt.Errorf("wordlist file not found: %s", w)
+			}
 			wordlist = w
 		}
 	}

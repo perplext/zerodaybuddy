@@ -116,11 +116,15 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 		return nil, fmt.Errorf("failed to write targets to file: %v", err)
 	}
 
-	// Determine which templates to use based on options
+	// Determine which templates to use based on options (whitelist-validated)
 	templateFlags := []string{"-t", "technologies,exposures,misconfigurations,cves"}
 	if options != nil {
 		if templates, ok := options["templates"].(string); ok && templates != "" {
-			templateFlags = []string{"-t", templates}
+			if validated, err := validateNucleiTemplates(templates); err != nil {
+				return nil, fmt.Errorf("invalid templates option: %w", err)
+			} else {
+				templateFlags = []string{"-t", validated}
+			}
 		}
 	}
 
@@ -136,11 +140,15 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	}
 	args = append(args, templateFlags...)
 
-	// Set severity level (default to medium and above)
+	// Set severity level (default to medium and above, whitelist-validated)
 	severityLevel := "medium,high,critical"
 	if options != nil {
 		if sev, ok := options["severity"].(string); ok && sev != "" {
-			severityLevel = sev
+			if validated, err := validateNucleiSeverity(sev); err != nil {
+				return nil, fmt.Errorf("invalid severity option: %w", err)
+			} else {
+				severityLevel = validated
+			}
 		}
 	}
 	args = append(args, "-severity", severityLevel)
@@ -190,4 +198,56 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	s.logger.Debug("Nuclei found %d vulnerabilities across %d URLs", len(results), len(inScopeURLs))
 
 	return results, nil
+}
+
+// allowedNucleiTemplates is the set of valid nuclei template categories.
+var allowedNucleiTemplates = map[string]bool{
+	"technologies": true, "exposures": true, "misconfigurations": true,
+	"cves": true, "vulnerabilities": true, "default-logins": true,
+	"network": true, "dns": true, "file": true, "headless": true,
+	"helpers": true, "iot": true, "ssl": true, "takeovers": true,
+	"token-spray": true, "fuzzing": true, "dast": true,
+}
+
+// allowedNucleiSeverities is the set of valid nuclei severity levels.
+var allowedNucleiSeverities = map[string]bool{
+	"info": true, "low": true, "medium": true, "high": true, "critical": true,
+}
+
+// validateNucleiTemplates validates a comma-separated list of template categories.
+func validateNucleiTemplates(templates string) (string, error) {
+	var valid []string
+	for _, t := range strings.Split(templates, ",") {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if !allowedNucleiTemplates[t] {
+			return "", fmt.Errorf("unknown template category %q", t)
+		}
+		valid = append(valid, t)
+	}
+	if len(valid) == 0 {
+		return "", fmt.Errorf("no valid template categories specified")
+	}
+	return strings.Join(valid, ","), nil
+}
+
+// validateNucleiSeverity validates a comma-separated list of severity levels.
+func validateNucleiSeverity(severity string) (string, error) {
+	var valid []string
+	for _, s := range strings.Split(severity, ",") {
+		s = strings.TrimSpace(strings.ToLower(s))
+		if s == "" {
+			continue
+		}
+		if !allowedNucleiSeverities[s] {
+			return "", fmt.Errorf("unknown severity level %q", s)
+		}
+		valid = append(valid, s)
+	}
+	if len(valid) == 0 {
+		return "", fmt.Errorf("no valid severity levels specified")
+	}
+	return strings.Join(valid, ","), nil
 }

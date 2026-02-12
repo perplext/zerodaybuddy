@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/perplext/zerodaybuddy/internal/auth"
+	"github.com/perplext/zerodaybuddy/internal/web/middleware"
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -403,7 +404,7 @@ func TestAuthHandler_Profile(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest(tt.method, "/profile", nil)
 			if tt.user != nil {
-				ctx := context.WithValue(req.Context(), "user", tt.user)
+				ctx := middleware.ContextWithUser(req.Context(), tt.user)
 				req = req.WithContext(ctx)
 			}
 
@@ -503,7 +504,7 @@ func TestAuthHandler_ChangePassword(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/change-password", bodyReader)
 			req.Header.Set("Content-Type", "application/json")
 			if tt.user != nil {
-				ctx := context.WithValue(req.Context(), "user", tt.user)
+				ctx := middleware.ContextWithUser(req.Context(), tt.user)
 				req = req.WithContext(ctx)
 			}
 

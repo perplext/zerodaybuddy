@@ -82,8 +82,8 @@ type SQLiteStore struct {
 
 // NewStore creates a new storage instance
 func NewStore(dataDir string) (Store, error) {
-	// Ensure the data directory exists
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	// Ensure the data directory exists (restricted perms — contains database)
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return nil, pkgerrors.InternalError("failed to create data directory", err).
 			WithContext("dataDir", dataDir)
 	}
@@ -113,13 +113,31 @@ func NewStore(dataDir string) (Store, error) {
 	return store, nil
 }
 
+// ConfigureSQLite applies performance and safety PRAGMAs to a SQLite connection.
+func ConfigureSQLite(db *sqlx.DB) error {
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=10000",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=-20000",
+		"PRAGMA temp_store=MEMORY",
+		"PRAGMA foreign_keys=ON",
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			return fmt.Errorf("failed to set %s: %w", p, err)
+		}
+	}
+	return nil
+}
+
 // initDatabaseWithMigrations initializes the database using migrations
 func (s *SQLiteStore) initDatabaseWithMigrations() error {
-	// Enable foreign keys
-	if _, err := s.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return fmt.Errorf("failed to enable foreign keys: %w", err)
+	// Configure SQLite for performance and safety
+	if err := ConfigureSQLite(s.db); err != nil {
+		return err
 	}
-	
+
 	// Run migrations
 	migrator := migrations.NewMigrator(s.db)
 	ctx := context.Background()

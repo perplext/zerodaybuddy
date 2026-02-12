@@ -268,20 +268,20 @@ These bugs mean the tool produces zero useful results for most real-world progra
 
 ### Acceptance Criteria — Phase 2
 
-- [ ] `zerodaybuddy serve` refuses to start without configured JWT secret
-- [ ] `zerodaybuddy init` auto-generates and persists a random JWT secret
-- [ ] Registration ignores `role` field from user input
-- [ ] CSRF middleware removed for API endpoints (or redesigned for SameSite if cookies used)
-- [ ] CORS headers present on API responses with configured origins
-- [ ] SQLite uses WAL mode (verify with `PRAGMA journal_mode`)
-- [ ] Config file created with `0600` permissions, directories with `0700`
-- [ ] Internal IPs rejected as scan targets (including DNS rebinding mitigation)
-- [ ] Login endpoint rate-limited (5 attempts per minute per IP, lockout after 10 failures)
-- [ ] Security headers present on all responses
-- [ ] Request body limited to 1MB
-- [ ] Scanner options whitelisted (severity, templates, wordlist)
-- [ ] JWT validated against session store on every request
-- [ ] govulncheck, gosec, staticcheck run in CI pipeline
+- [x] `zerodaybuddy serve` refuses to start without configured JWT secret
+- [x] `zerodaybuddy init` auto-generates and persists a random JWT secret
+- [x] Registration ignores `role` field from user input
+- [x] CSRF middleware removed for API endpoints (or redesigned for SameSite if cookies used)
+- [x] CORS headers present on API responses with configured origins
+- [x] SQLite uses WAL mode (verify with `PRAGMA journal_mode`)
+- [x] Config file created with `0600` permissions, directories with `0700`
+- [x] Internal IPs rejected as scan targets (including DNS rebinding mitigation)
+- [x] Login endpoint rate-limited (5 attempts per minute per IP, lockout after 10 failures)
+- [x] Security headers present on all responses
+- [x] Request body limited to 1MB
+- [x] Scanner options whitelisted (severity, templates, wordlist)
+- [x] JWT validated against session store on every request
+- [x] govulncheck, gosec, staticcheck run in CI pipeline
 
 ---
 

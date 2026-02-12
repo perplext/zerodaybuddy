@@ -199,7 +199,7 @@ func TestRequireRole(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			if tt.user != nil {
-				ctx := context.WithValue(req.Context(), "user", tt.user)
+				ctx := context.WithValue(req.Context(), userContextKey, tt.user)
 				req = req.WithContext(ctx)
 			}
 
@@ -310,135 +310,6 @@ func TestOptionalAuth(t *testing.T) {
 	}
 }
 
-func TestCSRF(t *testing.T) {
-	logger := utils.NewLogger("", false)
-
-	tests := []struct {
-		name           string
-		method         string
-		csrfHeader     string
-		csrfForm       string
-		expectedStatus int
-		expectedBody   string
-	}{
-		{
-			name:           "GET request - no CSRF needed",
-			method:         http.MethodGet,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "success",
-		},
-		{
-			name:           "HEAD request - no CSRF needed",
-			method:         http.MethodHead,
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "OPTIONS request - no CSRF needed",
-			method:         http.MethodOptions,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "success",
-		},
-		{
-			name:           "POST without CSRF token",
-			method:         http.MethodPost,
-			expectedStatus: http.StatusForbidden,
-			expectedBody:   "CSRF token required",
-		},
-		{
-			name:           "POST with CSRF header",
-			method:         http.MethodPost,
-			csrfHeader:     "valid-csrf-token-1234567890",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "success",
-		},
-		{
-			name:           "POST with CSRF form field",
-			method:         http.MethodPost,
-			csrfForm:       "valid-csrf-token-1234567890",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "success",
-		},
-		{
-			name:           "POST with short CSRF token",
-			method:         http.MethodPost,
-			csrfHeader:     "short",
-			expectedStatus: http.StatusForbidden,
-			expectedBody:   "Invalid CSRF token",
-		},
-		{
-			name:           "PUT without CSRF token",
-			method:         http.MethodPut,
-			expectedStatus: http.StatusForbidden,
-			expectedBody:   "CSRF token required",
-		},
-		{
-			name:           "DELETE with CSRF token",
-			method:         http.MethodDelete,
-			csrfHeader:     "valid-csrf-token-1234567890",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "success",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create test handler
-			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("success"))
-			})
-
-			// Apply middleware
-			middleware := CSRF(logger)
-			wrappedHandler := middleware(handler)
-
-			// Create request
-			req := httptest.NewRequest(tt.method, "/test", nil)
-			if tt.csrfHeader != "" {
-				req.Header.Set("X-CSRF-Token", tt.csrfHeader)
-			}
-			if tt.csrfForm != "" {
-				req.Form = map[string][]string{
-					"csrf_token": {tt.csrfForm},
-				}
-			}
-
-			// Execute request
-			w := httptest.NewRecorder()
-			wrappedHandler.ServeHTTP(w, req)
-
-			// Assert
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.expectedBody != "" {
-				assert.Contains(t, w.Body.String(), tt.expectedBody)
-			}
-		})
-	}
-}
-
-func TestRateLimitMiddleware(t *testing.T) {
-	logger := utils.NewLogger("", false)
-
-	// Create test handler
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
-	})
-
-	// Apply middleware
-	middleware := RateLimitMiddleware(60, logger)
-	wrappedHandler := middleware(handler)
-
-	// Create request
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
-	wrappedHandler.ServeHTTP(w, req)
-
-	// Assert - placeholder implementation always passes
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "success", w.Body.String())
-}
-
 func TestGetUserFromContext(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -472,7 +343,7 @@ func TestGetUserFromContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			if tt.contextValue != nil {
-				ctx = context.WithValue(ctx, "user", tt.contextValue)
+				ctx = context.WithValue(ctx, userContextKey, tt.contextValue)
 			}
 
 			user := GetUserFromContext(ctx)
@@ -522,7 +393,7 @@ func TestRequireAuth(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			if tt.user != nil {
-				ctx := context.WithValue(req.Context(), "user", tt.user)
+				ctx := context.WithValue(req.Context(), userContextKey, tt.user)
 				req = req.WithContext(ctx)
 			}
 
@@ -556,7 +427,7 @@ func TestAdminOnly(t *testing.T) {
 		Role: auth.RoleAdmin,
 	}
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	ctx := context.WithValue(req.Context(), "user", adminUser)
+	ctx := context.WithValue(req.Context(), userContextKey, adminUser)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
@@ -585,7 +456,7 @@ func TestUserOrAdmin(t *testing.T) {
 		Role: auth.RoleUser,
 	}
 	req := httptest.NewRequest(http.MethodGet, "/user", nil)
-	ctx := context.WithValue(req.Context(), "user", user)
+	ctx := context.WithValue(req.Context(), userContextKey, user)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()

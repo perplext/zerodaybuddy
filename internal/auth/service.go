@@ -49,19 +49,14 @@ func (s *Service) CreateUser(ctx context.Context, req *CreateUserRequest) (*User
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Set default role if not specified
-	role := req.Role
-	if role == "" {
-		role = RoleUser
-	}
-
-	// Create user
+	// Always assign RoleUser for self-registration.
+	// Only admins can assign roles via a separate admin endpoint.
 	user := &User{
 		Username: req.Username,
 		Email:    req.Email,
 		FullName: req.FullName,
 		Password: passwordHash,
-		Role:     role,
+		Role:     RoleUser,
 		Status:   StatusActive,
 	}
 
@@ -152,6 +147,11 @@ func (s *Service) ValidateToken(ctx context.Context, tokenString string) (*User,
 	// Ensure it's an access token
 	if claims.Type != "access" {
 		return nil, fmt.Errorf("invalid token type")
+	}
+
+	// Verify session still exists (ensures logout actually revokes access)
+	if _, err := s.store.GetSession(ctx, tokenString); err != nil {
+		return nil, fmt.Errorf("session revoked")
 	}
 
 	// Get user from database
@@ -313,27 +313,32 @@ func (s *Service) CleanupExpiredSessions(ctx context.Context) error {
 	return s.store.CleanupExpiredSessions(ctx)
 }
 
-// ExtractIPAddress extracts IP address from request, considering proxies
-func ExtractIPAddress(remoteAddr, xForwardedFor, xRealIP string) string {
-	// Check X-Forwarded-For header first
-	if xForwardedFor != "" {
-		ips := strings.Split(xForwardedFor, ",")
-		if len(ips) > 0 {
-			ip := strings.TrimSpace(ips[0])
-			if net.ParseIP(ip) != nil {
-				return ip
+// ExtractIPAddress extracts IP address from request, considering proxies.
+// Only trust proxy headers (X-Forwarded-For, X-Real-IP) when proxyEnabled is true.
+func ExtractIPAddress(remoteAddr, xForwardedFor, xRealIP string, proxyEnabled bool) string {
+	if proxyEnabled {
+		// When behind a trusted reverse proxy, take the rightmost non-private IP
+		// from X-Forwarded-For (closest to the proxy we trust).
+		if xForwardedFor != "" {
+			ips := strings.Split(xForwardedFor, ",")
+			// Walk from right to left — the rightmost entry was appended by our proxy
+			for i := len(ips) - 1; i >= 0; i-- {
+				ip := strings.TrimSpace(ips[i])
+				if net.ParseIP(ip) != nil {
+					return ip
+				}
+			}
+		}
+
+		// Check X-Real-IP header
+		if xRealIP != "" {
+			if net.ParseIP(xRealIP) != nil {
+				return xRealIP
 			}
 		}
 	}
 
-	// Check X-Real-IP header
-	if xRealIP != "" {
-		if net.ParseIP(xRealIP) != nil {
-			return xRealIP
-		}
-	}
-
-	// Fall back to RemoteAddr
+	// Fall back to RemoteAddr (always trusted)
 	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
 		return host
 	}
