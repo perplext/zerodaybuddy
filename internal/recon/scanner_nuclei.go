@@ -107,8 +107,9 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	targetsFile := filepath.Join(tempDir, "targets.txt")
 	outputFile := filepath.Join(tempDir, "nuclei_output.json")
 
-	if err := os.WriteFile(targetsFile, []byte(strings.Join(inScopeURLs, "\n")), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write targets to file: %v", err)
+	writeErr := os.WriteFile(targetsFile, []byte(strings.Join(inScopeURLs, "\n")), 0644)
+	if writeErr != nil {
+		return nil, fmt.Errorf("failed to write targets to file: %v", writeErr)
 	}
 
 	// Determine which templates to use based on options (whitelist-validated)
@@ -120,11 +121,11 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	}
 	templateFlags := []string{"-t", "technologies,exposures,misconfigurations,cves"}
 	if templates != "" {
-		if validated, err := validateNucleiTemplates(templates); err != nil {
-			return nil, fmt.Errorf("invalid templates option: %w", err)
-		} else {
-			templateFlags = []string{"-t", validated}
+		validated, validateErr := validateNucleiTemplates(templates)
+		if validateErr != nil {
+			return nil, fmt.Errorf("invalid templates option: %w", validateErr)
 		}
+		templateFlags = []string{"-t", validated}
 	}
 
 	// Build command arguments
@@ -149,12 +150,11 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	if severityLevel == "" {
 		severityLevel = "medium,high,critical"
 	}
-	if validated, err := validateNucleiSeverity(severityLevel); err != nil {
-		return nil, fmt.Errorf("invalid severity option: %w", err)
-	} else {
-		severityLevel = validated
+	validatedSev, sevErr := validateNucleiSeverity(severityLevel)
+	if sevErr != nil {
+		return nil, fmt.Errorf("invalid severity option: %w", sevErr)
 	}
-	args = append(args, "-severity", severityLevel)
+	args = append(args, "-severity", validatedSev)
 
 	// DAST/fuzzing mode flags
 	if opts.DAST {
@@ -162,25 +162,25 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 		s.logger.Debug("DAST fuzzing mode enabled")
 	}
 	if opts.InputMode != "" {
-		if validated, err := validateNucleiInputMode(opts.InputMode); err != nil {
-			return nil, fmt.Errorf("invalid input-mode option: %w", err)
-		} else {
-			args = append(args, "-input-mode", validated)
+		validatedIM, imErr := validateNucleiInputMode(opts.InputMode)
+		if imErr != nil {
+			return nil, fmt.Errorf("invalid input-mode option: %w", imErr)
 		}
+		args = append(args, "-input-mode", validatedIM)
 	}
 	if opts.FuzzingType != "" {
-		if validated, err := validateNucleiFuzzingType(opts.FuzzingType); err != nil {
-			return nil, fmt.Errorf("invalid fuzzing-type option: %w", err)
-		} else {
-			args = append(args, "-fuzzing-type", validated)
+		validatedFT, ftErr := validateNucleiFuzzingType(opts.FuzzingType)
+		if ftErr != nil {
+			return nil, fmt.Errorf("invalid fuzzing-type option: %w", ftErr)
 		}
+		args = append(args, "-fuzzing-type", validatedFT)
 	}
 	if opts.FuzzingMode != "" {
-		if validated, err := validateNucleiFuzzingMode(opts.FuzzingMode); err != nil {
-			return nil, fmt.Errorf("invalid fuzzing-mode option: %w", err)
-		} else {
-			args = append(args, "-fuzzing-mode", validated)
+		validatedFM, fmErr := validateNucleiFuzzingMode(opts.FuzzingMode)
+		if fmErr != nil {
+			return nil, fmt.Errorf("invalid fuzzing-mode option: %w", fmErr)
 		}
+		args = append(args, "-fuzzing-mode", validatedFM)
 	}
 
 	// Execute the command

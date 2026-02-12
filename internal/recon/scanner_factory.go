@@ -126,23 +126,33 @@ func (r *ScannerRegistry) GetScannersByType(scannerType string) []Scanner {
 	switch scannerType {
 	case "subdomain":
 		for _, s := range r.subdomainScanners {
-			result = append(result, s.(Scanner))
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "http":
 		for _, s := range r.hostProbers {
-			result = append(result, s.(Scanner))
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "port":
 		for _, s := range r.portScanners {
-			result = append(result, s.(Scanner))
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "content":
 		for _, s := range r.endpointDiscoverers {
-			result = append(result, s.(Scanner))
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "vulnerability":
 		for _, s := range r.vulnScanners {
-			result = append(result, s.(Scanner))
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	}
 
