@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/perplext/zerodaybuddy/pkg/config"
@@ -63,9 +64,10 @@ type NucleiResultInfo struct {
 	Reference      []string `json:"reference,omitempty"`
 	Severity       string   `json:"severity"`
 	Classification struct {
-		CVEIDs []string `json:"cve-id,omitempty"`
-		CVSSScore  string   `json:"cvss-score,omitempty"`
-		CVE     string   `json:"cve,omitempty"`
+		CVEIDs    []string `json:"cve-id,omitempty"`
+		CWEIDs    []string `json:"cwe-id,omitempty"`
+		CVSSScore string   `json:"cvss-score,omitempty"`
+		CVE       string   `json:"cve,omitempty"`
 	} `json:"classification,omitempty"`
 }
 
@@ -262,18 +264,25 @@ func nucleiResultToFinding(r NucleiResult, projectID string) *models.Finding {
 		finding.URL = r.MatchedAt
 	}
 
-	// Map CVSS score
+	// Map CVSS score to the dedicated float64 field
 	if r.Info.Classification.CVSSScore != "" {
-		finding.Details = fmt.Sprintf("CVSS: %s", r.Info.Classification.CVSSScore)
+		if score, parseErr := strconv.ParseFloat(r.Info.Classification.CVSSScore, 64); parseErr == nil {
+			finding.CVSS = score
+		}
 	}
 
-	// Map CWE
+	// Map CWE IDs (not CVE IDs)
+	if len(r.Info.Classification.CWEIDs) > 0 {
+		finding.CWE = strings.Join(r.Info.Classification.CWEIDs, ",")
+	}
+
+	// Append CVE IDs to references
 	if len(r.Info.Classification.CVEIDs) > 0 {
-		finding.CWE = strings.Join(r.Info.Classification.CVEIDs, ",")
+		finding.References = append(finding.References, r.Info.Classification.CVEIDs...)
 	}
 
-	// Map references
-	finding.References = r.Info.Reference
+	// Map remaining references
+	finding.References = append(finding.References, r.Info.Reference...)
 
 	return finding
 }

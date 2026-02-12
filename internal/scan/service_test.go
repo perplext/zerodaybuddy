@@ -367,10 +367,12 @@ func TestScanService_ProcessFinding(t *testing.T) {
 			Reference:   []string{"https://nvd.nist.gov/vuln/detail/CVE-2021-44228"},
 			Classification: struct {
 				CVEIDs    []string `json:"cve-id,omitempty"`
+				CWEIDs    []string `json:"cwe-id,omitempty"`
 				CVSSScore string   `json:"cvss-score,omitempty"`
 				CVE       string   `json:"cve,omitempty"`
 			}{
 				CVEIDs:    []string{"CVE-2021-44228"},
+				CWEIDs:    []string{"CWE-502"},
 				CVSSScore: "10.0",
 			},
 		},

@@ -74,8 +74,8 @@ func (s *GitleaksScanner) ScanVulnerabilities(ctx context.Context, project *mode
 
 	var allFindings []*models.Finding
 
-	for _, target := range targets {
-		outputFile := filepath.Join(tempDir, "gitleaks_output.json")
+	for i, target := range targets {
+		outputFile := filepath.Join(tempDir, fmt.Sprintf("gitleaks_output_%d.json", i))
 
 		args := []string{
 			"detect",

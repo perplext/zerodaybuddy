@@ -598,8 +598,10 @@ func hostToURLs(host *models.Host) []string {
 	var urls []string
 	for _, port := range host.Ports {
 		switch port {
-		case 443, 8443:
+		case 443:
 			urls = append(urls, fmt.Sprintf("https://%s", host.Value))
+		case 8443:
+			urls = append(urls, fmt.Sprintf("https://%s:%d", host.Value, port))
 		case 80:
 			urls = append(urls, fmt.Sprintf("http://%s", host.Value))
 		default:

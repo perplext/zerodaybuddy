@@ -15,8 +15,8 @@ import (
 // SubmitReport submits a finding as a report to HackerOne using the Report Intents API.
 // It implements the ReportSubmitter interface.
 func (h *HackerOne) SubmitReport(ctx context.Context, programHandle string, finding *models.Finding) (string, error) {
-	if h.config.APIKey == "" {
-		return "", fmt.Errorf("HackerOne API credentials not configured")
+	if h.config.Username == "" || h.config.AuthToken == "" {
+		return "", fmt.Errorf("HackerOne API credentials not configured (username and auth_token required)")
 	}
 
 	h.logger.Debug("Submitting report to HackerOne program: %s", programHandle)
@@ -27,8 +27,13 @@ func (h *HackerOne) SubmitReport(ctx context.Context, programHandle string, find
 		return "", fmt.Errorf("failed to create report intent: %w", err)
 	}
 
-	// Step 2: Submit the report using the intent
-	reportID, err := h.submitReportWithIntent(ctx, intentID, programHandle, finding)
+	// Step 2: Update the intent with report details
+	if err := h.updateReportIntent(ctx, intentID, finding); err != nil {
+		return "", fmt.Errorf("failed to update report intent: %w", err)
+	}
+
+	// Step 3: Submit the report intent
+	reportID, err := h.submitReportIntent(ctx, intentID)
 	if err != nil {
 		return "", fmt.Errorf("failed to submit report: %w", err)
 	}
@@ -78,7 +83,7 @@ func (h *HackerOne) createReportIntent(ctx context.Context, programHandle string
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s",
-		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.APIKey, h.config.APIKey)))))
+		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.Username, h.config.AuthToken)))))
 
 	resp, err := h.client.Do(ctx, req)
 	if err != nil {
@@ -99,30 +104,6 @@ func (h *HackerOne) createReportIntent(ctx context.Context, programHandle string
 	return intentResp.Data.ID, nil
 }
 
-// reportSubmissionRequest represents the HackerOne report submission payload.
-type reportSubmissionRequest struct {
-	Data struct {
-		Type       string `json:"type"`
-		Attributes struct {
-			Title            string `json:"title"`
-			VulnerabilityInfo string `json:"vulnerability_information"`
-			Impact           string `json:"impact"`
-			Severity         struct {
-				Rating string `json:"rating"`
-			} `json:"severity"`
-			WeaknessID string `json:"weakness_id,omitempty"`
-		} `json:"attributes"`
-		Relationships struct {
-			Program struct {
-				Data struct {
-					Type string `json:"type"`
-					ID   string `json:"id"`
-				} `json:"data"`
-			} `json:"program"`
-		} `json:"relationships"`
-	} `json:"data"`
-}
-
 // reportSubmissionResponse represents the response from submitting a report.
 type reportSubmissionResponse struct {
 	Data struct {
@@ -131,10 +112,26 @@ type reportSubmissionResponse struct {
 	} `json:"data"`
 }
 
-// submitReportWithIntent submits the actual report using a report intent.
-func (h *HackerOne) submitReportWithIntent(ctx context.Context, intentID, programHandle string, finding *models.Finding) (string, error) {
-	payload := reportSubmissionRequest{}
-	payload.Data.Type = "report"
+// reportIntentUpdateRequest represents the payload for updating a report intent with report details.
+type reportIntentUpdateRequest struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Title             string `json:"title"`
+			VulnerabilityInfo string `json:"vulnerability_information"`
+			Impact            string `json:"impact"`
+			Severity          struct {
+				Rating string `json:"rating"`
+			} `json:"severity"`
+			WeaknessID string `json:"weakness_id,omitempty"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+// updateReportIntent populates a report intent with finding details.
+func (h *HackerOne) updateReportIntent(ctx context.Context, intentID string, finding *models.Finding) error {
+	payload := reportIntentUpdateRequest{}
+	payload.Data.Type = "report-intent"
 	payload.Data.Attributes.Title = finding.Title
 	payload.Data.Attributes.VulnerabilityInfo = formatReportBody(finding)
 	payload.Data.Attributes.Impact = finding.Impact
@@ -144,24 +141,47 @@ func (h *HackerOne) submitReportWithIntent(ctx context.Context, intentID, progra
 		payload.Data.Attributes.WeaknessID = finding.CWE
 	}
 
-	payload.Data.Relationships.Program.Data.Type = "program"
-	payload.Data.Relationships.Program.Data.ID = programHandle
-
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/reports", h.config.APIUrl)
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
+	endpoint := fmt.Sprintf("%s/report_intents/%s", h.config.APIUrl, intentID)
+	req, err := http.NewRequestWithContext(ctx, "PUT", endpoint, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s",
-		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.APIKey, h.config.APIKey)))))
+		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.Username, h.config.AuthToken)))))
+
+	resp, err := h.client.Do(ctx, req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, respBody)
+	}
+
+	return nil
+}
+
+// submitReportIntent submits a report intent, finalizing the report.
+func (h *HackerOne) submitReportIntent(ctx context.Context, intentID string) (string, error) {
+	endpoint := fmt.Sprintf("%s/report_intents/%s/submit", h.config.APIUrl, intentID)
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Basic %s",
+		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.Username, h.config.AuthToken)))))
 
 	resp, err := h.client.Do(ctx, req)
 	if err != nil {

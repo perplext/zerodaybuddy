@@ -36,17 +36,22 @@ func GenerateSARIF(ctx context.Context, store SARIFStore, projectID string) (str
 	run.Tool.Driver.WithVersion("0.1.0")
 	run.Tool.Driver.WithSemanticVersion("0.1.0")
 
+	seenRules := make(map[string]bool)
+
 	for _, f := range findings {
 		ruleID := ruleIDFromFinding(f)
 
-		// Add rule if not already present
-		rule := run.AddRule(ruleID).
-			WithDescription(f.Description).
-			WithShortDescription(&sarif.MultiformatMessageString{Text: &f.Title})
+		// Add rule only if not already present
+		if !seenRules[ruleID] {
+			seenRules[ruleID] = true
+			rule := run.AddRule(ruleID).
+				WithDescription(f.Description).
+				WithShortDescription(&sarif.MultiformatMessageString{Text: &f.Title})
 
-		if f.CWE != "" {
-			rule.Properties = sarif.Properties{
-				"cwe": f.CWE,
+			if f.CWE != "" {
+				rule.Properties = sarif.Properties{
+					"cwe": f.CWE,
+				}
 			}
 		}
 
