@@ -44,6 +44,7 @@ type Store interface {
 	GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
 	UpdateEndpoint(ctx context.Context, endpoint *models.Endpoint) error
 	ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error)
+	ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error)
 	DeleteEndpoint(ctx context.Context, id string) error
 	
 	// Finding methods

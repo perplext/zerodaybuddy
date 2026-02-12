@@ -194,5 +194,18 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 
 	s.logger.Debug("FFUF scan completed with %d total findings", len(allResults))
 
-	return allResults, nil
+	// Convert FFUFResults to []*models.Endpoint for downstream consumption
+	endpoints := make([]*models.Endpoint, 0, len(allResults))
+	for _, r := range allResults {
+		endpoint := &models.Endpoint{
+			URL:         r.URL,
+			Method:      "GET",
+			Status:      r.Status,
+			ContentType: r.ContentType,
+			FoundBy:     "ffuf",
+		}
+		endpoints = append(endpoints, endpoint)
+	}
+
+	return endpoints, nil
 }

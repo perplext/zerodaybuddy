@@ -53,7 +53,7 @@ func NewWaybackScanner(config config.ToolsConfig, logger *utils.Logger) Scanner 
 
 // Name returns the name of the scanner
 func (s *WaybackScanner) Name() string {
-	return "wayback"
+	return "waybackurls"
 }
 
 // Description returns a description of the scanner
@@ -190,7 +190,7 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 			}
 		}
 
-		s.logger.Debug("Found %d historical URLs for domain %s", len(allResults)-len(allResults), domain)
+		s.logger.Debug("Found %d historical URLs for domain %s", len(allResults), domain)
 	}
 
 	// Filter for unique URLs
@@ -205,5 +205,31 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 
 	s.logger.Debug("Wayback scan completed with %d unique historical URLs", len(filteredResults))
 
-	return filteredResults, nil
+	// Convert WaybackResults to []*models.Endpoint for downstream consumption
+	endpoints := make([]*models.Endpoint, 0, len(filteredResults))
+	for _, r := range filteredResults {
+		endpoint := waybackResultToEndpoint(r)
+		endpoints = append(endpoints, endpoint)
+	}
+
+	return endpoints, nil
+}
+
+// waybackResultToEndpoint converts a WaybackResult to a models.Endpoint
+func waybackResultToEndpoint(r WaybackResult) *models.Endpoint {
+	endpoint := &models.Endpoint{
+		URL:     r.URL,
+		Status:  r.StatusCode,
+		FoundBy: "waybackurls",
+	}
+
+	// Extract content type from mime type
+	if r.MimeType != "" {
+		endpoint.ContentType = r.MimeType
+	}
+
+	// Extract method — Wayback Machine results are all GET
+	endpoint.Method = "GET"
+
+	return endpoint
 }

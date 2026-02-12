@@ -100,7 +100,7 @@ func TestScopeIsInScope(t *testing.T) {
 			name:      "subdomain check",
 			assetType: AssetTypeDomain,
 			value:     "sub.example.com",
-			expected:  false, // TODO: Should be true when isSubdomain is implemented
+			expected:  true,
 		},
 		{
 			name:      "IP in scope",
@@ -167,7 +167,66 @@ func TestMatchAsset(t *testing.T) {
 			value:    "other.com",
 			expected: false,
 		},
-		// TODO: Add wildcard tests when implemented
+		{
+			name:     "wildcard single level",
+			pattern:  "*.example.com",
+			value:    "sub.example.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard multi level",
+			pattern:  "*.example.com",
+			value:    "deep.sub.example.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard no match parent",
+			pattern:  "*.example.com",
+			value:    "example.com",
+			expected: false,
+		},
+		{
+			name:     "wildcard no match different domain",
+			pattern:  "*.example.com",
+			value:    "sub.other.com",
+			expected: false,
+		},
+		{
+			name:     "CIDR match",
+			pattern:  "10.0.0.0/8",
+			value:    "10.1.2.3",
+			expected: true,
+		},
+		{
+			name:     "CIDR no match",
+			pattern:  "10.0.0.0/8",
+			value:    "192.168.1.1",
+			expected: false,
+		},
+		{
+			name:     "CIDR /24 match",
+			pattern:  "192.168.1.0/24",
+			value:    "192.168.1.50",
+			expected: true,
+		},
+		{
+			name:     "CIDR /24 no match",
+			pattern:  "192.168.1.0/24",
+			value:    "192.168.2.1",
+			expected: false,
+		},
+		{
+			name:     "URL to domain extraction",
+			pattern:  "example.com",
+			value:    "https://example.com/path",
+			expected: true,
+		},
+		{
+			name:     "URL wildcard match",
+			pattern:  "*.example.com",
+			value:    "https://api.example.com/v1",
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -181,21 +240,57 @@ func TestMatchAsset(t *testing.T) {
 func TestIsSubdomain(t *testing.T) {
 	tests := []struct {
 		name     string
-		parent   string
 		child    string
+		parent   string
 		expected bool
 	}{
 		{
-			name:     "not implemented",
-			parent:   "example.com",
+			name:     "basic subdomain",
 			child:    "sub.example.com",
-			expected: false, // TODO: Should be true when implemented
+			parent:   "example.com",
+			expected: true,
+		},
+		{
+			name:     "deep subdomain",
+			child:    "deep.sub.example.com",
+			parent:   "example.com",
+			expected: true,
+		},
+		{
+			name:     "exact match is not subdomain",
+			child:    "example.com",
+			parent:   "example.com",
+			expected: false,
+		},
+		{
+			name:     "different domain",
+			child:    "sub.other.com",
+			parent:   "example.com",
+			expected: false,
+		},
+		{
+			name:     "partial suffix not subdomain",
+			child:    "notexample.com",
+			parent:   "example.com",
+			expected: false,
+		},
+		{
+			name:     "trailing dot normalization",
+			child:    "sub.example.com.",
+			parent:   "example.com.",
+			expected: true,
+		},
+		{
+			name:     "case insensitive",
+			child:    "Sub.EXAMPLE.com",
+			parent:   "example.COM",
+			expected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isSubdomain(tt.parent, tt.child)
+			result := isSubdomain(tt.child, tt.parent)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

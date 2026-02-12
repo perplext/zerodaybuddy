@@ -74,7 +74,7 @@ func TestScannerFactory_GetScanner(t *testing.T) {
 		},
 		{
 			name:        "Get existing scanner - wayback",
-			scannerName: "wayback",
+			scannerName: "waybackurls",
 			wantErr:     false,
 		},
 		{
@@ -137,7 +137,7 @@ func TestScannerFactory_ListScanners(t *testing.T) {
 		"httpx",
 		"naabu",
 		"katana",
-		"wayback",
+		"waybackurls",
 		"ffuf",
 		"nuclei",
 	}
@@ -189,8 +189,8 @@ func TestScannerFactory_GetScannersByType(t *testing.T) {
 		{
 			name:         "Get content scanners",
 			scannerType:  "content",
-			expectedList: []string{"ffuf"},
-			count:        1,
+			expectedList: []string{"ffuf", "katana", "waybackurls"},
+			count:        3,
 		},
 		{
 			name:         "Get vulnerability scanners",
@@ -264,7 +264,7 @@ func TestScannerFactory_registerScanners(t *testing.T) {
 		"naabu":     true,
 		"ffuf":      true,
 		"katana":    true,
-		"wayback":   true,
+		"waybackurls":   true,
 		"nuclei":    true,
 	}
 	

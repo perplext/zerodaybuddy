@@ -154,5 +154,28 @@ func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	s.logger.Debug("Katana scan completed with %d total findings", len(allResults))
 
-	return allResults, nil
+	// Convert KatanaResults to []*models.Endpoint for downstream consumption
+	endpoints := make([]*models.Endpoint, 0, len(allResults))
+	for _, r := range allResults {
+		endpoint := katanaResultToEndpoint(r)
+		endpoints = append(endpoints, endpoint)
+	}
+
+	return endpoints, nil
+}
+
+// katanaResultToEndpoint converts a KatanaResult to a models.Endpoint
+func katanaResultToEndpoint(r KatanaResult) *models.Endpoint {
+	endpoint := &models.Endpoint{
+		URL:     r.URL,
+		Method:  r.Method,
+		Status:  r.Status,
+		FoundBy: "katana",
+	}
+
+	if endpoint.Method == "" {
+		endpoint.Method = "GET"
+	}
+
+	return endpoint
 }

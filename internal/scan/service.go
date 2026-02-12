@@ -22,7 +22,8 @@ type Service struct {
 		GetHost(ctx context.Context, id string) (*models.Host, error)
 		GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
 		ListHosts(ctx context.Context, projectID string) ([]*models.Host, error)
-		ListEndpoints(ctx context.Context, projectID string) ([]*models.Endpoint, error)
+		ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error)
+		ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error)
 		CreateFinding(ctx context.Context, finding *models.Finding) error
 		CreateTask(ctx context.Context, task *models.Task) error
 		UpdateTask(ctx context.Context, task *models.Task) error
@@ -38,7 +39,8 @@ func NewService(store interface {
 	GetHost(ctx context.Context, id string) (*models.Host, error)
 	GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
 	ListHosts(ctx context.Context, projectID string) ([]*models.Host, error)
-	ListEndpoints(ctx context.Context, projectID string) ([]*models.Endpoint, error)
+	ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error)
+	ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error)
 	CreateFinding(ctx context.Context, finding *models.Finding) error
 	CreateTask(ctx context.Context, task *models.Task) error
 	UpdateTask(ctx context.Context, task *models.Task) error
@@ -125,7 +127,7 @@ func (s *Service) ScanTarget(ctx context.Context, projectID string, target strin
 
 // scanAllEndpoints scans all discovered endpoints in the project
 func (s *Service) scanAllEndpoints(ctx context.Context, project *models.Project, task *models.Task, concurrency int) error {
-	endpoints, err := s.store.ListEndpoints(ctx, project.ID)
+	endpoints, err := s.store.ListEndpointsByProject(ctx, project.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list endpoints: %w", err)
 	}
@@ -166,11 +168,11 @@ func (s *Service) scanHost(ctx context.Context, project *models.Project, hostID 
 		return fmt.Errorf("host does not belong to project")
 	}
 	
-	endpoints, err := s.store.ListEndpoints(ctx, project.ID)
+	endpoints, err := s.store.ListEndpointsByProject(ctx, project.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list endpoints: %w", err)
 	}
-	
+
 	// Filter endpoints for this host
 	var urls []string
 	for _, endpoint := range endpoints {

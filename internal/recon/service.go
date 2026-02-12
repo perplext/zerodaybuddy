@@ -522,8 +522,11 @@ func (s *Service) discoverEndpoints(ctx context.Context, project *models.Project
 			defer func() { <-s.semaphore }()
 			
 			s.logger.Debug("Running %s for host %s", scanner.Name(), host.Value)
-			
-			result, err := scanner.Scan(ctx, project, host, nil)
+
+			// Build URL targets from host for scanners that expect []string
+			targets := hostToURLs(host)
+
+			result, err := scanner.Scan(ctx, project, targets, nil)
 			if err != nil {
 				s.logger.Error("Failed to run %s for host %s: %v", scanner.Name(), host.Value, err)
 				return
@@ -569,8 +572,11 @@ func (s *Service) bruteForceDirectories(ctx context.Context, project *models.Pro
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
 	
+	// Build URL targets from host
+	targets := hostToURLs(host)
+
 	// Run directory brute forcing
-	result, err := scanner.Scan(ctx, project, host, nil)
+	result, err := scanner.Scan(ctx, project, targets, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to brute force directories: %w", err)
 	}
@@ -588,6 +594,27 @@ func (s *Service) bruteForceDirectories(ctx context.Context, project *models.Pro
 	}
 	
 	return endpoints, nil
+}
+
+// hostToURLs converts a Host to a list of URLs based on its ports
+func hostToURLs(host *models.Host) []string {
+	if len(host.Ports) == 0 {
+		// Default to HTTPS if no ports specified
+		return []string{"https://" + host.Value}
+	}
+
+	var urls []string
+	for _, port := range host.Ports {
+		switch port {
+		case 443, 8443:
+			urls = append(urls, fmt.Sprintf("https://%s", host.Value))
+		case 80:
+			urls = append(urls, fmt.Sprintf("http://%s", host.Value))
+		default:
+			urls = append(urls, fmt.Sprintf("http://%s:%d", host.Value, port))
+		}
+	}
+	return urls
 }
 
 // isWebHost checks if a host is a web host

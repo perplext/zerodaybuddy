@@ -45,7 +45,7 @@ func (f *ScannerFactory) registerScanners() {
 	
 	// Register crawling tools
 	f.scanners["katana"] = NewKatanaScanner(f.config.Tools, f.logger)
-	f.scanners["wayback"] = NewWaybackScanner(f.config.Tools, f.logger)
+	f.scanners["waybackurls"] = NewWaybackScanner(f.config.Tools, f.logger)
 	
 	// Register vulnerability scanning tools
 	f.scanners["nuclei"] = NewNucleiScanner(f.config.Tools, f.logger)
@@ -91,6 +91,12 @@ func (f *ScannerFactory) GetScannersByType(scannerType string) []Scanner {
 		}
 	case "content":
 		if s, ok := f.scanners["ffuf"]; ok {
+			result = append(result, s)
+		}
+		if s, ok := f.scanners["katana"]; ok {
+			result = append(result, s)
+		}
+		if s, ok := f.scanners["waybackurls"]; ok {
 			result = append(result, s)
 		}
 	case "vulnerability":

@@ -50,7 +50,15 @@ func (m *MockStore) ListHosts(ctx context.Context, projectID string) ([]*models.
 	return args.Get(0).([]*models.Host), args.Error(1)
 }
 
-func (m *MockStore) ListEndpoints(ctx context.Context, projectID string) ([]*models.Endpoint, error) {
+func (m *MockStore) ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error) {
+	args := m.Called(ctx, hostID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Endpoint), args.Error(1)
+}
+
+func (m *MockStore) ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error) {
 	args := m.Called(ctx, projectID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -153,7 +161,7 @@ func TestScanService_ScanTarget(t *testing.T) {
 						URL:       "http://example.com:80/api",
 					},
 				}
-				ms.On("ListEndpoints", mock.Anything, project.ID).Return(endpoints, nil)
+				ms.On("ListEndpointsByProject", mock.Anything, project.ID).Return(endpoints, nil)
 				
 				// Mock nuclei results
 				nucleiResults := []recon.NucleiResult{
@@ -213,7 +221,7 @@ func TestScanService_ScanTarget(t *testing.T) {
 						URL:       "https://example.com:443/",
 					},
 				}
-				ms.On("ListEndpoints", mock.Anything, project.ID).Return(endpoints, nil)
+				ms.On("ListEndpointsByProject", mock.Anything, project.ID).Return(endpoints, nil)
 				
 				scanner.On("Scan", mock.Anything, project, []string{"https://example.com:443/"}, mock.Anything).Return([]recon.NucleiResult{}, nil)
 			},
