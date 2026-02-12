@@ -21,7 +21,7 @@ type NucleiScanner struct {
 }
 
 // NewNucleiScanner creates a new Nuclei scanner
-func NewNucleiScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewNucleiScanner(config config.ToolsConfig, logger *utils.Logger) *NucleiScanner {
 	return &NucleiScanner{
 		config: config,
 		logger: logger,
@@ -69,18 +69,13 @@ type NucleiResultInfo struct {
 	} `json:"classification,omitempty"`
 }
 
-// Scan performs vulnerability scanning on web endpoints
-func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	urls, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for Nuclei: %T", target)
+// ScanVulnerabilities implements VulnerabilityScanner.
+func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models.Project, targets []string, opts ScanOptions) ([]*models.Finding, error) {
+	if len(targets) == 0 {
+		return nil, nil
 	}
 
-	if len(urls) == 0 {
-		return []NucleiResult{}, nil
-	}
-
-	s.logger.Debug("Starting Nuclei scan for %d URLs", len(urls))
+	s.logger.Debug("Starting Nuclei scan for %d URLs", len(targets))
 
 	// Ensure we have the path to nuclei
 	nucleiPath := s.config.NucleiPath
@@ -97,7 +92,7 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	// Filter URLs to ensure they're in scope
 	var inScopeURLs []string
-	for _, url := range urls {
+	for _, url := range targets {
 		if project.Scope.IsInScope(models.AssetTypeURL, url) {
 			inScopeURLs = append(inScopeURLs, url)
 		}
@@ -105,7 +100,7 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	if len(inScopeURLs) == 0 {
 		s.logger.Debug("No in-scope URLs for Nuclei scan")
-		return []NucleiResult{}, nil
+		return nil, nil
 	}
 
 	// Write targets to the temporary file
@@ -117,14 +112,18 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	}
 
 	// Determine which templates to use based on options (whitelist-validated)
+	templates := opts.Templates
+	if templates == "" {
+		if t, ok := opts.Extra["templates"].(string); ok && t != "" {
+			templates = t
+		}
+	}
 	templateFlags := []string{"-t", "technologies,exposures,misconfigurations,cves"}
-	if options != nil {
-		if templates, ok := options["templates"].(string); ok && templates != "" {
-			if validated, err := validateNucleiTemplates(templates); err != nil {
-				return nil, fmt.Errorf("invalid templates option: %w", err)
-			} else {
-				templateFlags = []string{"-t", validated}
-			}
+	if templates != "" {
+		if validated, err := validateNucleiTemplates(templates); err != nil {
+			return nil, fmt.Errorf("invalid templates option: %w", err)
+		} else {
+			templateFlags = []string{"-t", validated}
 		}
 	}
 
@@ -141,15 +140,19 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	args = append(args, templateFlags...)
 
 	// Set severity level (default to medium and above, whitelist-validated)
-	severityLevel := "medium,high,critical"
-	if options != nil {
-		if sev, ok := options["severity"].(string); ok && sev != "" {
-			if validated, err := validateNucleiSeverity(sev); err != nil {
-				return nil, fmt.Errorf("invalid severity option: %w", err)
-			} else {
-				severityLevel = validated
-			}
+	severityLevel := opts.Severity
+	if severityLevel == "" {
+		if sev, ok := opts.Extra["severity"].(string); ok && sev != "" {
+			severityLevel = sev
 		}
+	}
+	if severityLevel == "" {
+		severityLevel = "medium,high,critical"
+	}
+	if validated, err := validateNucleiSeverity(severityLevel); err != nil {
+		return nil, fmt.Errorf("invalid severity option: %w", err)
+	} else {
+		severityLevel = validated
 	}
 	args = append(args, "-severity", severityLevel)
 
@@ -172,8 +175,7 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	outputData, err := os.ReadFile(outputFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No findings
-			return []NucleiResult{}, nil
+			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to read nuclei output: %v", err)
 	}
@@ -197,7 +199,56 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	s.logger.Debug("Nuclei found %d vulnerabilities across %d URLs", len(results), len(inScopeURLs))
 
-	return results, nil
+	// Convert NucleiResult to []*models.Finding
+	findings := make([]*models.Finding, 0, len(results))
+	for _, r := range results {
+		finding := nucleiResultToFinding(r, project.ID)
+		findings = append(findings, finding)
+	}
+
+	return findings, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	urls, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for Nuclei: %T", target)
+	}
+	return s.ScanVulnerabilities(ctx, project, urls, ScanOptions{Extra: options})
+}
+
+// nucleiResultToFinding converts a NucleiResult to a models.Finding.
+func nucleiResultToFinding(r NucleiResult, projectID string) *models.Finding {
+	finding := &models.Finding{
+		ProjectID:   projectID,
+		Type:        models.FindingType(r.Type),
+		Title:       r.Info.Name,
+		Description: r.Info.Description,
+		Severity:    models.FindingSeverity(r.Severity),
+		URL:         r.Host,
+		FoundBy:     "nuclei",
+		Status:      models.FindingStatusNew,
+	}
+
+	if r.MatchedAt != "" {
+		finding.URL = r.MatchedAt
+	}
+
+	// Map CVSS score
+	if r.Info.Classification.CVSSScore != "" {
+		finding.Details = fmt.Sprintf("CVSS: %s", r.Info.Classification.CVSSScore)
+	}
+
+	// Map CWE
+	if len(r.Info.Classification.CVEIDs) > 0 {
+		finding.CWE = strings.Join(r.Info.Classification.CVEIDs, ",")
+	}
+
+	// Map references
+	finding.References = r.Info.Reference
+
+	return finding
 }
 
 // allowedNucleiTemplates is the set of valid nuclei template categories.

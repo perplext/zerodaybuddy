@@ -10,26 +10,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service provides reporting functionality
-type Service struct {
-	store  interface {
-		GetProject(ctx context.Context, id string) (*models.Project, error)
-		GetFinding(ctx context.Context, id string) (*models.Finding, error)
-		CreateReport(ctx context.Context, report *models.Report) (*models.Report, error)
-		GetReport(ctx context.Context, id string) (*models.Report, error)
-		ListReports(ctx context.Context, projectID string) ([]*models.Report, error)
-	}
-	logger *utils.Logger
-}
-
-// NewService creates a new reporting service
-func NewService(store interface {
+// ReportStore defines the storage methods used by the report service.
+type ReportStore interface {
 	GetProject(ctx context.Context, id string) (*models.Project, error)
 	GetFinding(ctx context.Context, id string) (*models.Finding, error)
 	CreateReport(ctx context.Context, report *models.Report) (*models.Report, error)
 	GetReport(ctx context.Context, id string) (*models.Report, error)
 	ListReports(ctx context.Context, projectID string) ([]*models.Report, error)
-}, logger *utils.Logger) *Service {
+}
+
+// Service provides reporting functionality
+type Service struct {
+	store  ReportStore
+	logger *utils.Logger
+}
+
+// NewService creates a new reporting service
+func NewService(store ReportStore, logger *utils.Logger) *Service {
 	return &Service{
 		store:  store,
 		logger: logger,

@@ -21,7 +21,7 @@ type FFUFScanner struct {
 }
 
 // NewFFUFScanner creates a new FFUF scanner
-func NewFFUFScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewFFUFScanner(config config.ToolsConfig, logger *utils.Logger) *FFUFScanner {
 	return &FFUFScanner{
 		config: config,
 		logger: logger,
@@ -49,15 +49,10 @@ type FFUFResult struct {
 	Redirects  string `json:"redirects,omitempty"`
 }
 
-// Scan performs content discovery on web endpoints
-func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	urls, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for FFUF: %T", target)
-	}
-
+// DiscoverEndpoints implements EndpointDiscoverer.
+func (s *FFUFScanner) DiscoverEndpoints(ctx context.Context, project *models.Project, urls []string, opts ScanOptions) ([]*models.Endpoint, error) {
 	if len(urls) == 0 {
-		return []FFUFResult{}, nil
+		return nil, nil
 	}
 
 	s.logger.Debug("Starting FFUF scan for %d URLs", len(urls))
@@ -69,17 +64,19 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 	}
 
 	// Get wordlist path from options or use default (validate as real file path)
-	wordlist := ""
-	if options != nil {
-		if w, ok := options["wordlist"].(string); ok && w != "" {
-			// Reject values that look like flag injection
-			if strings.HasPrefix(w, "-") || strings.ContainsAny(w, ";|&`$") {
-				return nil, fmt.Errorf("invalid wordlist path: %q", w)
-			}
-			if _, err := os.Stat(w); err != nil {
-				return nil, fmt.Errorf("wordlist file not found: %s", w)
-			}
+	wordlist := opts.Wordlist
+	if wordlist == "" {
+		if w, ok := opts.Extra["wordlist"].(string); ok && w != "" {
 			wordlist = w
+		}
+	}
+	if wordlist != "" {
+		// Reject values that look like flag injection
+		if strings.HasPrefix(wordlist, "-") || strings.ContainsAny(wordlist, ";|&`$") {
+			return nil, fmt.Errorf("invalid wordlist path: %q", wordlist)
+		}
+		if _, err := os.Stat(wordlist); err != nil {
+			return nil, fmt.Errorf("wordlist file not found: %s", wordlist)
 		}
 	}
 
@@ -104,7 +101,7 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 	}
 	defer os.RemoveAll(tempDir)
 
-	allResults := []FFUFResult{}
+	var allResults []FFUFResult
 
 	// Process each URL separately
 	for _, baseURL := range urls {
@@ -159,15 +156,15 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 
 		var ffufOutput struct {
 			Results []struct {
-				Input map[string]string `json:"input"`
-				Position int `json:"position"`
-				Status int `json:"status"`
-				Length int `json:"length"`
-				Words int `json:"words"`
-				Lines int `json:"lines"`
-				ContentType string `json:"content_type"`
-				Redirects []string `json:"redirects,omitempty"`
-				URL string `json:"url"`
+				Input       map[string]string `json:"input"`
+				Position    int               `json:"position"`
+				Status      int               `json:"status"`
+				Length      int               `json:"length"`
+				Words       int               `json:"words"`
+				Lines       int               `json:"lines"`
+				ContentType string            `json:"content_type"`
+				Redirects   []string          `json:"redirects,omitempty"`
+				URL         string            `json:"url"`
 			} `json:"results"`
 		}
 
@@ -178,13 +175,12 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 
 		// Convert FFUF results to our format
 		for _, result := range ffufOutput.Results {
-			// Create a new result
 			ffufResult := FFUFResult{
-				URL:        result.URL,
-				Status:     result.Status,
-				Length:     result.Length,
-				Words:      result.Words,
-				Lines:      result.Lines,
+				URL:         result.URL,
+				Status:      result.Status,
+				Length:      result.Length,
+				Words:       result.Words,
+				Lines:       result.Lines,
 				ContentType: result.ContentType,
 			}
 
@@ -215,4 +211,13 @@ func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target 
 	}
 
 	return endpoints, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *FFUFScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	urls, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for FFUF: %T", target)
+	}
+	return s.DiscoverEndpoints(ctx, project, urls, ScanOptions{Extra: options})
 }

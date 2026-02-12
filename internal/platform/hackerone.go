@@ -161,10 +161,10 @@ func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) 
 func (h *HackerOne) GetProgram(ctx context.Context, handle string) (*models.Program, error) {
 	h.logger.Debug("Getting HackerOne program: %s", handle)
 	
-	if h.config.APIKey == "" || h.config.Username == "" {
+	if h.config.APIKey == "" {
 		return nil, fmt.Errorf("HackerOne API credentials not configured")
 	}
-	
+
 	// HackerOne API endpoint for a specific program
 	endpoint := fmt.Sprintf("%s/programs/%s", h.config.APIUrl, handle)
 	
@@ -248,10 +248,10 @@ func (h *HackerOne) GetProgram(ctx context.Context, handle string) (*models.Prog
 func (h *HackerOne) FetchScope(ctx context.Context, handle string) (*models.Scope, error) {
 	h.logger.Debug("Fetching scope for HackerOne program: %s", handle)
 	
-	if h.config.APIKey == "" || h.config.Username == "" {
+	if h.config.APIKey == "" {
 		return nil, fmt.Errorf("HackerOne API credentials not configured")
 	}
-	
+
 	// HackerOne API endpoint for program scope
 	endpoint := fmt.Sprintf("%s/programs/%s/structured_scopes", h.config.APIUrl, handle)
 	

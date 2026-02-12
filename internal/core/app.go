@@ -25,7 +25,7 @@ import (
 // App represents the main application
 type App struct {
 	config      *config.Config
-	store       storage.Store
+	store       *storage.SQLiteStore
 	platforms   map[string]platform.Platform
 	authSvc     *auth.Service
 	reconSvc    *recon.Service

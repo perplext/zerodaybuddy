@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	"github.com/perplext/zerodaybuddy/pkg/models"
 	"github.com/perplext/zerodaybuddy/pkg/utils"
-	"github.com/google/uuid"
 )
 
 // Results represents the results of reconnaissance
@@ -19,28 +19,8 @@ type Results struct {
 	Findings   []*models.Finding
 }
 
-// Service provides reconnaissance functionality
-type Service struct {
-	store        interface {
-		CreateHost(ctx context.Context, host *models.Host) error
-		GetHost(ctx context.Context, id string) (*models.Host, error)
-		UpdateHost(ctx context.Context, host *models.Host) error
-		ListHosts(ctx context.Context, projectID string) ([]*models.Host, error)
-		CreateEndpoint(ctx context.Context, endpoint *models.Endpoint) error
-		CreateFinding(ctx context.Context, finding *models.Finding) error
-		CreateTask(ctx context.Context, task *models.Task) error
-		UpdateTask(ctx context.Context, task *models.Task) error
-	}
-	config    config.ToolsConfig
-	logger    *utils.Logger
-	scanners  map[string]Scanner
-	semaphore chan struct{}
-}
-
-// We're not defining Scanner here anymore as it's defined in scanner.go
-
-// NewService creates a new reconnaissance service
-func NewService(store interface {
+// ReconStore defines the storage methods used by the recon service.
+type ReconStore interface {
 	CreateHost(ctx context.Context, host *models.Host) error
 	GetHost(ctx context.Context, id string) (*models.Host, error)
 	UpdateHost(ctx context.Context, host *models.Host) error
@@ -49,7 +29,19 @@ func NewService(store interface {
 	CreateFinding(ctx context.Context, finding *models.Finding) error
 	CreateTask(ctx context.Context, task *models.Task) error
 	UpdateTask(ctx context.Context, task *models.Task) error
-}, config config.ToolsConfig, logger *utils.Logger) *Service {
+}
+
+// Service provides reconnaissance functionality
+type Service struct {
+	store     ReconStore
+	config    config.ToolsConfig
+	logger    *utils.Logger
+	scanners  map[string]Scanner
+	semaphore chan struct{}
+}
+
+// NewService creates a new reconnaissance service
+func NewService(store ReconStore, config config.ToolsConfig, logger *utils.Logger) *Service {
 	service := &Service{
 		store:     store,
 		config:    config,
@@ -372,37 +364,37 @@ func (s *Service) discoverSubdomains(ctx context.Context, project *models.Projec
 	var wg sync.WaitGroup
 	
 	// Use both subfinder and amass for discovery
-	scanners := []string{"subfinder", "amass"}
-	
-	for _, scannerName := range scanners {
+	scannerNames := []string{"subfinder", "amass"}
+
+	for _, scannerName := range scannerNames {
 		scanner, ok := s.scanners[scannerName]
 		if !ok {
 			s.logger.Warn("Scanner %s not found", scannerName)
 			continue
 		}
-		
+
+		subScanner, ok := scanner.(SubdomainScanner)
+		if !ok {
+			s.logger.Warn("Scanner %s does not implement SubdomainScanner", scannerName)
+			continue
+		}
+
 		wg.Add(1)
-		go func(scanner Scanner, domain string) {
+		go func(sub SubdomainScanner, domain string) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			s.semaphore <- struct{}{}
 			defer func() { <-s.semaphore }()
-			
-			s.logger.Debug("Running %s for domain %s", scanner.Name(), domain)
-			
-			result, err := scanner.Scan(ctx, project, domain, nil)
+
+			s.logger.Debug("Running %s for domain %s", sub.Name(), domain)
+
+			subdomains, err := sub.ScanSubdomains(ctx, project, domain, ScanOptions{})
 			if err != nil {
-				s.logger.Error("Failed to run %s for domain %s: %v", scanner.Name(), domain, err)
+				s.logger.Error("Failed to run %s for domain %s: %v", sub.Name(), domain, err)
 				return
 			}
-			
-			subdomains, ok := result.([]string)
-			if !ok {
-				s.logger.Error("Unexpected result type from %s: %T", scanner.Name(), result)
-				return
-			}
-			
+
 			// Filter subdomains for scope
 			var inScope []string
 			for _, subdomain := range subdomains {
@@ -410,15 +402,15 @@ func (s *Service) discoverSubdomains(ctx context.Context, project *models.Projec
 					inScope = append(inScope, subdomain)
 				}
 			}
-			
-			s.logger.Debug("%s found %d subdomains (%d in scope) for domain %s", 
-				scanner.Name(), len(subdomains), len(inScope), domain)
-			
+
+			s.logger.Debug("%s found %d subdomains (%d in scope) for domain %s",
+				sub.Name(), len(subdomains), len(inScope), domain)
+
 			// Add to all subdomains
 			mu.Lock()
 			allSubdomains = append(allSubdomains, inScope...)
 			mu.Unlock()
-		}(scanner, domain)
+		}(subScanner, domain)
 	}
 	
 	wg.Wait()
@@ -435,20 +427,20 @@ func (s *Service) probeHosts(ctx context.Context, project *models.Project, hosts
 	if !ok {
 		return nil, fmt.Errorf("HTTP prober not found")
 	}
-	
+
+	prober, ok := scanner.(HostProber)
+	if !ok {
+		return nil, fmt.Errorf("httpx does not implement HostProber")
+	}
+
 	// Acquire semaphore
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
-	
+
 	// Run HTTP probing
-	result, err := scanner.Scan(ctx, project, hosts, nil)
+	discoveredHosts, err := prober.ProbeHosts(ctx, project, hosts, ScanOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to probe hosts: %w", err)
-	}
-	
-	discoveredHosts, ok := result.([]*models.Host)
-	if !ok {
-		return nil, fmt.Errorf("unexpected result type: %T", result)
 	}
 	
 	// Save hosts to storage
@@ -469,20 +461,20 @@ func (s *Service) scanPorts(ctx context.Context, project *models.Project, target
 	if !ok {
 		return nil, fmt.Errorf("port scanner not found")
 	}
-	
+
+	portScanner, ok := scanner.(PortScanner)
+	if !ok {
+		return nil, fmt.Errorf("naabu does not implement PortScanner")
+	}
+
 	// Acquire semaphore
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
-	
+
 	// Run port scanning
-	result, err := scanner.Scan(ctx, project, targets, nil)
+	discoveredHosts, err := portScanner.ScanPorts(ctx, project, targets, ScanOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan ports: %w", err)
-	}
-	
-	discoveredHosts, ok := result.([]*models.Host)
-	if !ok {
-		return nil, fmt.Errorf("unexpected result type: %T", result)
 	}
 	
 	// Save hosts to storage
@@ -504,54 +496,54 @@ func (s *Service) discoverEndpoints(ctx context.Context, project *models.Project
 	var wg sync.WaitGroup
 	
 	// Use both katana and waybackurls for discovery
-	scanners := []string{"katana", "waybackurls"}
-	
-	for _, scannerName := range scanners {
+	scannerNames := []string{"katana", "waybackurls"}
+
+	for _, scannerName := range scannerNames {
 		scanner, ok := s.scanners[scannerName]
 		if !ok {
 			s.logger.Warn("Scanner %s not found", scannerName)
 			continue
 		}
-		
+
+		epScanner, ok := scanner.(EndpointDiscoverer)
+		if !ok {
+			s.logger.Warn("Scanner %s does not implement EndpointDiscoverer", scannerName)
+			continue
+		}
+
 		wg.Add(1)
-		go func(scanner Scanner, host *models.Host) {
+		go func(disc EndpointDiscoverer, host *models.Host) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			s.semaphore <- struct{}{}
 			defer func() { <-s.semaphore }()
-			
-			s.logger.Debug("Running %s for host %s", scanner.Name(), host.Value)
+
+			s.logger.Debug("Running %s for host %s", disc.Name(), host.Value)
 
 			// Build URL targets from host for scanners that expect []string
 			targets := hostToURLs(host)
 
-			result, err := scanner.Scan(ctx, project, targets, nil)
+			endpoints, err := disc.DiscoverEndpoints(ctx, project, targets, ScanOptions{})
 			if err != nil {
-				s.logger.Error("Failed to run %s for host %s: %v", scanner.Name(), host.Value, err)
+				s.logger.Error("Failed to run %s for host %s: %v", disc.Name(), host.Value, err)
 				return
 			}
-			
-			endpoints, ok := result.([]*models.Endpoint)
-			if !ok {
-				s.logger.Error("Unexpected result type from %s: %T", scanner.Name(), result)
-				return
-			}
-			
-			s.logger.Debug("%s found %d endpoints for host %s", scanner.Name(), len(endpoints), host.Value)
-			
+
+			s.logger.Debug("%s found %d endpoints for host %s", disc.Name(), len(endpoints), host.Value)
+
 			// Save endpoints to storage
 			for _, endpoint := range endpoints {
 				if err := s.store.CreateEndpoint(ctx, endpoint); err != nil {
 					s.logger.Error("Failed to save endpoint %s: %v", endpoint.URL, err)
 				}
 			}
-			
+
 			// Add to all endpoints
 			mu.Lock()
 			allEndpoints = append(allEndpoints, endpoints...)
 			mu.Unlock()
-		}(scanner, host)
+		}(epScanner, host)
 	}
 	
 	wg.Wait()
@@ -567,23 +559,23 @@ func (s *Service) bruteForceDirectories(ctx context.Context, project *models.Pro
 	if !ok {
 		return nil, fmt.Errorf("directory brute forcer not found")
 	}
-	
+
+	disc, ok := scanner.(EndpointDiscoverer)
+	if !ok {
+		return nil, fmt.Errorf("ffuf does not implement EndpointDiscoverer")
+	}
+
 	// Acquire semaphore
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
-	
+
 	// Build URL targets from host
 	targets := hostToURLs(host)
 
 	// Run directory brute forcing
-	result, err := scanner.Scan(ctx, project, targets, nil)
+	endpoints, err := disc.DiscoverEndpoints(ctx, project, targets, ScanOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to brute force directories: %w", err)
-	}
-	
-	endpoints, ok := result.([]*models.Endpoint)
-	if !ok {
-		return nil, fmt.Errorf("unexpected result type: %T", result)
 	}
 	
 	// Save endpoints to storage

@@ -86,6 +86,46 @@ func (m *MockScanner) Scan(ctx context.Context, project *models.Project, target 
 	return args.Get(0), args.Error(1)
 }
 
+func (m *MockScanner) ScanSubdomains(ctx context.Context, project *models.Project, domain string, opts ScanOptions) ([]string, error) {
+	args := m.Called(ctx, project, domain, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
+func (m *MockScanner) ProbeHosts(ctx context.Context, project *models.Project, hosts []string, opts ScanOptions) ([]*models.Host, error) {
+	args := m.Called(ctx, project, hosts, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Host), args.Error(1)
+}
+
+func (m *MockScanner) ScanPorts(ctx context.Context, project *models.Project, targets []string, opts ScanOptions) ([]*models.Host, error) {
+	args := m.Called(ctx, project, targets, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Host), args.Error(1)
+}
+
+func (m *MockScanner) DiscoverEndpoints(ctx context.Context, project *models.Project, urls []string, opts ScanOptions) ([]*models.Endpoint, error) {
+	args := m.Called(ctx, project, urls, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Endpoint), args.Error(1)
+}
+
+func (m *MockScanner) ScanVulnerabilities(ctx context.Context, project *models.Project, targets []string, opts ScanOptions) ([]*models.Finding, error) {
+	args := m.Called(ctx, project, targets, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Finding), args.Error(1)
+}
+
 // Test utilities
 func getTestLogger() *utils.Logger {
 	return utils.NewLogger("", true) // Empty logDir, debug=true
@@ -453,7 +493,7 @@ func TestService_RunHTTPProbing(t *testing.T) {
 			name:  "Success",
 			hosts: []string{"example.com", "sub.example.com"},
 			setupMocks: func(store *MockStore, scanner *MockScanner) {
-				scanner.On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanner.On("ProbeHosts", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Host{
 						{ID: "host1", Value: "example.com", Type: models.AssetTypeDomain},
 						{ID: "host2", Value: "sub.example.com", Type: models.AssetTypeDomain},
@@ -476,7 +516,7 @@ func TestService_RunHTTPProbing(t *testing.T) {
 			name:  "Scanner error",
 			hosts: []string{"example.com"},
 			setupMocks: func(store *MockStore, scanner *MockScanner) {
-				scanner.On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanner.On("ProbeHosts", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, errors.New("scan failed"))
 			},
 			wantErr: true,
@@ -486,7 +526,7 @@ func TestService_RunHTTPProbing(t *testing.T) {
 			name:  "Store error",
 			hosts: []string{"example.com"},
 			setupMocks: func(store *MockStore, scanner *MockScanner) {
-				scanner.On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanner.On("ProbeHosts", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Host{
 						{ID: "host1", Value: "example.com", Type: models.AssetTypeDomain},
 					}, nil)
@@ -553,7 +593,7 @@ func TestService_RunPortScanning(t *testing.T) {
 			name:    "Success",
 			targets: []string{"192.168.1.1", "192.168.1.2"},
 			setupMocks: func(store *MockStore, scanner *MockScanner) {
-				scanner.On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanner.On("ScanPorts", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Host{
 						{ID: "host1", Value: "192.168.1.1", Type: models.AssetTypeIP, Ports: []int{22, 80}},
 						{ID: "host2", Value: "192.168.1.2", Type: models.AssetTypeIP, Ports: []int{443}},
@@ -634,11 +674,11 @@ func TestService_RunContentDiscovery(t *testing.T) {
 				Ports: []int{443},
 			},
 			setupMocks: func(store *MockStore, scanners map[string]*MockScanner) {
-				scanners["katana"].On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanners["katana"].On("DiscoverEndpoints", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Endpoint{
 						{ID: "ep1", URL: "https://example.com/api"},
 					}, nil)
-				scanners["waybackurls"].On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanners["waybackurls"].On("DiscoverEndpoints", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Endpoint{
 						{ID: "ep2", URL: "https://example.com/login"},
 					}, nil)
@@ -668,11 +708,11 @@ func TestService_RunContentDiscovery(t *testing.T) {
 				Ports: []int{443},
 			},
 			setupMocks: func(store *MockStore, scanners map[string]*MockScanner) {
-				scanners["katana"].On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanners["katana"].On("DiscoverEndpoints", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Endpoint{
 						{ID: "ep1", URL: "https://example.com/api"},
 					}, nil)
-				scanners["waybackurls"].On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanners["waybackurls"].On("DiscoverEndpoints", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, errors.New("scanner failed"))
 				store.On("CreateEndpoint", mock.Anything, mock.AnythingOfType("*models.Endpoint")).Return(nil)
 			},
@@ -749,7 +789,7 @@ func TestService_RunDirectoryBruteForce(t *testing.T) {
 				Ports: []int{443},
 			},
 			setupMocks: func(store *MockStore, scanner *MockScanner) {
-				scanner.On("Scan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				scanner.On("DiscoverEndpoints", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*models.Endpoint{
 						{ID: "ep1", URL: "https://example.com/admin"},
 						{ID: "ep2", URL: "https://example.com/backup"},

@@ -11,128 +11,35 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+  id-token: write  # For cosign keyless signing
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.23'
-
-      - name: Run unit tests
-        run: go test ./... -short
-
-      - name: Build project
-        run: go build -o zerodaybuddy ./cmd/zerodaybuddy
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-            goos: linux
-            goarch: amd64
-          - os: linux
-            arch: arm64
-            goos: linux
-            goarch: arm64
-          - os: windows
-            arch: amd64
-            goos: windows
-            goarch: amd64
-          - os: darwin
-            arch: amd64
-            goos: darwin
-            goarch: amd64
-          - os: darwin
-            arch: arm64
-            goos: darwin
-            goarch: arm64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.23'
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          VERSION=${{ github.ref_name || github.event.inputs.tag }}
-          COMMIT=$(git rev-parse --short HEAD)
-          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          LDFLAGS="-s -w -X github.com/perplext/zerodaybuddy/internal/version.Version=${VERSION} -X github.com/perplext/zerodaybuddy/internal/version.GitCommit=${COMMIT} -X github.com/perplext/zerodaybuddy/internal/version.BuildDate=${DATE}"
-          
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            go build -ldflags="${LDFLAGS}" -o zerodaybuddy-${{ matrix.os }}-${{ matrix.arch }}.exe ./cmd/zerodaybuddy
-          else
-            go build -ldflags="${LDFLAGS}" -o zerodaybuddy-${{ matrix.os }}-${{ matrix.arch }} ./cmd/zerodaybuddy
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zerodaybuddy-${{ matrix.os }}-${{ matrix.arch }}
-          path: zerodaybuddy-*
-
   release:
-    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
         with:
-          files: |
-            zerodaybuddy-*/zerodaybuddy-*
-          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
-          name: ZeroDayBuddy ${{ github.ref_name || github.event.inputs.tag }}
-          body: |
-            ## ZeroDayBuddy Release ${{ github.ref_name || github.event.inputs.tag }}
-            
-            A comprehensive bug bounty assistant tool that streamlines security research workflows.
-            
-            ### Downloads
-            - **Linux (x64)**: zerodaybuddy-linux-amd64
-            - **Linux (ARM64)**: zerodaybuddy-linux-arm64  
-            - **macOS (Intel)**: zerodaybuddy-darwin-amd64
-            - **macOS (Apple Silicon)**: zerodaybuddy-darwin-arm64
-            - **Windows (x64)**: zerodaybuddy-windows-amd64.exe
-            
-            ### Installation
-            1. Download the appropriate binary for your platform
-            2. Make it executable: `chmod +x zerodaybuddy-*`
-            3. Move to PATH: `sudo mv zerodaybuddy-* /usr/local/bin/zerodaybuddy`
-            4. Initialize: `zerodaybuddy init`
-            
-            ### Features
-            - Bug bounty platform integration (HackerOne, Bugcrowd)
-            - Automated reconnaissance and scanning
-            - Professional vulnerability reporting
-            - Web interface for project management
-            
-            See the [README](https://github.com/perplext/zerodaybuddy/blob/main/README.md) for detailed usage instructions.
-          draft: false
-          prerelease: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install CycloneDX
+        run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

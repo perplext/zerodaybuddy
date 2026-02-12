@@ -21,7 +21,7 @@ type NaabuScanner struct {
 }
 
 // NewNaabuScanner creates a new Naabu scanner
-func NewNaabuScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewNaabuScanner(config config.ToolsConfig, logger *utils.Logger) *NaabuScanner {
 	return &NaabuScanner{
 		config: config,
 		logger: logger,
@@ -46,18 +46,13 @@ type NaabuResult struct {
 	Proto string `json:"protocol"`
 }
 
-// Scan performs port scanning on a list of hosts
-func (s *NaabuScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	domains, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for Naabu: %T", target)
+// ScanPorts implements PortScanner.
+func (s *NaabuScanner) ScanPorts(ctx context.Context, project *models.Project, targets []string, opts ScanOptions) ([]*models.Host, error) {
+	if len(targets) == 0 {
+		return nil, nil
 	}
 
-	if len(domains) == 0 {
-		return []NaabuResult{}, nil
-	}
-
-	s.logger.Debug("Starting Naabu scan for %d domains", len(domains))
+	s.logger.Debug("Starting Naabu scan for %d domains", len(targets))
 
 	// Ensure we have the path to naabu
 	naabuPath := s.config.NaabuPath
@@ -76,16 +71,14 @@ func (s *NaabuScanner) Scan(ctx context.Context, project *models.Project, target
 	outputFile := filepath.Join(tempDir, "naabu_output.json")
 
 	// Write domains to the temporary file
-	if err := os.WriteFile(domainsFile, []byte(strings.Join(domains, "\n")), 0644); err != nil {
+	if err := os.WriteFile(domainsFile, []byte(strings.Join(targets, "\n")), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write domains to file: %v", err)
 	}
 
 	// Determine which ports to scan based on options
 	ports := "top-1000" // Default to top 1000 ports
-	if options != nil {
-		if portsOpt, ok := options["ports"].(string); ok && portsOpt != "" {
-			ports = portsOpt
-		}
+	if v, ok := opts.Extra["ports"].(string); ok && v != "" {
+		ports = v
 	}
 
 	// Build command arguments
@@ -115,8 +108,8 @@ func (s *NaabuScanner) Scan(ctx context.Context, project *models.Project, target
 		return nil, fmt.Errorf("failed to read naabu output: %v", err)
 	}
 
-	// Naabu outputs JSON objects one per line
-	var results []NaabuResult
+	// Naabu outputs JSON objects one per line — group ports by host
+	hostPorts := make(map[string]*models.Host)
 	for _, line := range strings.Split(string(outputData), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -130,12 +123,40 @@ func (s *NaabuScanner) Scan(ctx context.Context, project *models.Project, target
 		}
 
 		// Only include hosts that are in scope
-		if project.Scope.IsInScope(models.AssetTypeDomain, result.Host) {
-			results = append(results, result)
+		if !project.Scope.IsInScope(models.AssetTypeDomain, result.Host) {
+			continue
 		}
+
+		h, exists := hostPorts[result.Host]
+		if !exists {
+			h = &models.Host{
+				ProjectID: project.ID,
+				Value:     result.Host,
+				IP:        result.IP,
+				Type:      models.AssetTypeDomain,
+				Status:    "open",
+				FoundBy:   "naabu",
+			}
+			hostPorts[result.Host] = h
+		}
+		h.Ports = append(h.Ports, result.Port)
 	}
 
-	s.logger.Debug("Naabu found %d open ports across %d domains", len(results), len(domains))
+	hosts := make([]*models.Host, 0, len(hostPorts))
+	for _, h := range hostPorts {
+		hosts = append(hosts, h)
+	}
 
-	return results, nil
+	s.logger.Debug("Naabu found %d hosts with open ports across %d domains", len(hosts), len(targets))
+
+	return hosts, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *NaabuScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	domains, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for Naabu: %T", target)
+	}
+	return s.ScanPorts(ctx, project, domains, ScanOptions{Extra: options})
 }

@@ -231,7 +231,7 @@ func openDatabase(app *core.App) (*sqlx.DB, error) {
 	dbPath := fmt.Sprintf("%s/zerodaybuddy.db", app.GetConfig().DataDir)
 
 	// Open database connection
-	db, err := sqlx.Connect("sqlite3", dbPath)
+	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
 		return nil, pkgerrors.InternalError("failed to connect to database", err).
 			WithContext("dbPath", dbPath)

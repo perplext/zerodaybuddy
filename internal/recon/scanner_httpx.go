@@ -23,7 +23,7 @@ type HTTPXScanner struct {
 }
 
 // NewHTTPXScanner creates a new httpx scanner
-func NewHTTPXScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewHTTPXScanner(config config.ToolsConfig, logger *utils.Logger) *HTTPXScanner {
 	return &HTTPXScanner{
 		config: config,
 		logger: logger,
@@ -51,18 +51,13 @@ type HTTPXResult struct {
 	ResponseTime   string `json:"response_time"`
 }
 
-// Scan performs HTTP probing on a list of hosts
-func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	domains, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for HTTPX: %T", target)
+// ProbeHosts implements HostProber.
+func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, hosts []string, opts ScanOptions) ([]*models.Host, error) {
+	if len(hosts) == 0 {
+		return nil, nil
 	}
 
-	if len(domains) == 0 {
-		return []HTTPXResult{}, nil
-	}
-
-	s.logger.Debug("Starting HTTPX scan for %d domains", len(domains))
+	s.logger.Debug("Starting HTTPX scan for %d domains", len(hosts))
 
 	// Ensure we have the path to httpx
 	httpxPath := s.config.HTTPXPath
@@ -81,7 +76,7 @@ func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target
 	outputFile := filepath.Join(tempDir, "httpx_output.json")
 
 	// Write domains to the temporary file
-	if err := os.WriteFile(domainsFile, []byte(strings.Join(domains, "\n")), 0644); err != nil {
+	if err := os.WriteFile(domainsFile, []byte(strings.Join(hosts, "\n")), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write domains to file: %v", err)
 	}
 
@@ -138,16 +133,25 @@ func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target
 		}
 	}
 
-	s.logger.Debug("HTTPX found %d HTTP endpoints from %d domains", len(results), len(domains))
+	s.logger.Debug("HTTPX found %d HTTP endpoints from %d domains", len(results), len(hosts))
 
 	// Convert HTTPXResult to []*models.Host for downstream consumption
-	hosts := make([]*models.Host, 0, len(results))
+	modelHosts := make([]*models.Host, 0, len(results))
 	for _, r := range results {
 		host := httpxResultToHost(r, project.ID)
-		hosts = append(hosts, host)
+		modelHosts = append(modelHosts, host)
 	}
 
-	return hosts, nil
+	return modelHosts, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	hosts, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for HTTPX: %T", target)
+	}
+	return s.ProbeHosts(ctx, project, hosts, ScanOptions{Extra: options})
 }
 
 // httpxResultToHost converts an HTTPXResult to a models.Host

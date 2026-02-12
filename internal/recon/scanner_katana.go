@@ -21,7 +21,7 @@ type KatanaScanner struct {
 }
 
 // NewKatanaScanner creates a new Katana scanner
-func NewKatanaScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewKatanaScanner(config config.ToolsConfig, logger *utils.Logger) *KatanaScanner {
 	return &KatanaScanner{
 		config: config,
 		logger: logger,
@@ -48,15 +48,10 @@ type KatanaResult struct {
 	Body      string `json:"body,omitempty"`
 }
 
-// Scan performs web crawling on given URLs
-func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	urls, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for Katana: %T", target)
-	}
-
+// DiscoverEndpoints implements EndpointDiscoverer.
+func (s *KatanaScanner) DiscoverEndpoints(ctx context.Context, project *models.Project, urls []string, opts ScanOptions) ([]*models.Endpoint, error) {
 	if len(urls) == 0 {
-		return []KatanaResult{}, nil
+		return nil, nil
 	}
 
 	s.logger.Debug("Starting Katana scan for %d URLs", len(urls))
@@ -74,7 +69,7 @@ func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, targe
 	}
 	defer os.RemoveAll(tempDir)
 
-	allResults := []KatanaResult{}
+	var allResults []KatanaResult
 
 	// Process each URL separately
 	for _, url := range urls {
@@ -104,10 +99,8 @@ func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, targe
 
 		// Set crawling depth
 		depth := 3 // Default depth
-		if options != nil {
-			if d, ok := options["depth"].(int); ok && d > 0 {
-				depth = d
-			}
+		if d, ok := opts.Extra["depth"].(int); ok && d > 0 {
+			depth = d
 		}
 		args = append(args, "-depth", fmt.Sprintf("%d", depth))
 
@@ -162,6 +155,15 @@ func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, targe
 	}
 
 	return endpoints, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	urls, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for Katana: %T", target)
+	}
+	return s.DiscoverEndpoints(ctx, project, urls, ScanOptions{Extra: options})
 }
 
 // katanaResultToEndpoint converts a KatanaResult to a models.Endpoint

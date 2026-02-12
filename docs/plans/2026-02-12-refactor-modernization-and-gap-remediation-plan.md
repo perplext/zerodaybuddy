@@ -478,18 +478,18 @@ func (r *ScannerRegistry) Register(scanner ScannerMeta) {
 
 ### Acceptance Criteria — Phase 3
 
-- [ ] `go build ./...` succeeds with `CGO_ENABLED=0`
-- [ ] All log output uses structured `slog` format
-- [ ] Sensitive fields (passwords, API keys) are masked in log output
-- [ ] CI tests Go 1.24, uses current action versions
-- [ ] GoReleaser produces binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
-- [ ] Release includes CycloneDX SBOM and Cosign signature
-- [ ] Scanner interface uses typed returns (no `interface{}`)
+- [x] `go build ./...` succeeds with `CGO_ENABLED=0`
+- [x] All log output uses structured `slog` format
+- [x] Sensitive fields (passwords, API keys) are masked in log output
+- [x] CI tests Go 1.24, uses current action versions
+- [x] GoReleaser produces binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+- [x] Release includes CycloneDX SBOM and Cosign signature
+- [x] Scanner interface uses typed returns (no `interface{}`)
 - [ ] ScannerRegistry auto-categorizes by interface implementation
 - [ ] Batch INSERT methods for hosts, endpoints, and findings
 - [ ] Error string compatibility verified with integration tests
-- [ ] All existing tests pass after migration
-- [ ] Deprecated `initDatabase()` and custom `contains()` removed
+- [x] All existing tests pass after migration
+- [x] Deprecated `initDatabase()` and custom `contains()` removed
 
 ---
 

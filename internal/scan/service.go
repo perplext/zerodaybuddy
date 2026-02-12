@@ -74,26 +74,8 @@ func filterSSRFURLs(urls []string, logger *utils.Logger) []string {
 	return safe
 }
 
-// Service provides vulnerability scanning functionality
-type Service struct {
-	store  interface {
-		GetProject(ctx context.Context, id string) (*models.Project, error)
-		GetHost(ctx context.Context, id string) (*models.Host, error)
-		GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
-		ListHosts(ctx context.Context, projectID string) ([]*models.Host, error)
-		ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error)
-		ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error)
-		CreateFinding(ctx context.Context, finding *models.Finding) error
-		CreateTask(ctx context.Context, task *models.Task) error
-		UpdateTask(ctx context.Context, task *models.Task) error
-	}
-	config config.Config
-	logger *utils.Logger
-	scannerFactory ScannerFactory
-}
-
-// NewService creates a new scanning service
-func NewService(store interface {
+// ScanStore defines the storage methods used by the scan service.
+type ScanStore interface {
 	GetProject(ctx context.Context, id string) (*models.Project, error)
 	GetHost(ctx context.Context, id string) (*models.Host, error)
 	GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
@@ -103,7 +85,18 @@ func NewService(store interface {
 	CreateFinding(ctx context.Context, finding *models.Finding) error
 	CreateTask(ctx context.Context, task *models.Task) error
 	UpdateTask(ctx context.Context, task *models.Task) error
-}, config config.Config, logger *utils.Logger) *Service {
+}
+
+// Service provides vulnerability scanning functionality
+type Service struct {
+	store          ScanStore
+	config         config.Config
+	logger         *utils.Logger
+	scannerFactory ScannerFactory
+}
+
+// NewService creates a new scanning service
+func NewService(store ScanStore, config config.Config, logger *utils.Logger) *Service {
 	return &Service{
 		store:  store,
 		config: config,

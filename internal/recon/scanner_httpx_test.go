@@ -21,12 +21,8 @@ func TestNewHTTPXScanner(t *testing.T) {
 	scanner := NewHTTPXScanner(config, logger)
 	
 	assert.NotNil(t, scanner)
-	
-	// Cast to concrete type to check fields
-	httpxScanner, ok := scanner.(*HTTPXScanner)
-	assert.True(t, ok)
-	assert.Equal(t, config, httpxScanner.config)
-	assert.Equal(t, logger, httpxScanner.logger)
+	assert.Equal(t, config, scanner.config)
+	assert.Equal(t, logger, scanner.logger)
 }
 
 func TestHTTPXScanner_Name(t *testing.T) {
@@ -126,11 +122,11 @@ func TestHTTPXScanner_Scan(t *testing.T) {
 				}
 			} else {
 				// We can't predict actual results from httpx
-				// Just check that we get a slice of HTTPXResult
+				// Just check that we get a slice of hosts
 				if err == nil {
-					results, ok := result.([]HTTPXResult)
-					assert.True(t, ok, "Expected result to be []HTTPXResult")
-					assert.NotNil(t, results)
+					results, ok := result.([]*models.Host)
+					assert.True(t, ok, "Expected result to be []*models.Host")
+					_ = results // may be nil for empty input
 				}
 			}
 		})

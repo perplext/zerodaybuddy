@@ -23,7 +23,7 @@ type WaybackScanner struct {
 }
 
 // NewWaybackScanner creates a new Wayback scanner
-func NewWaybackScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewWaybackScanner(config config.ToolsConfig, logger *utils.Logger) *WaybackScanner {
 	// Create rate limiter with config
 	rlConfig := ratelimit.DefaultConfig()
 	rateLimiter := ratelimit.New(rlConfig)
@@ -71,23 +71,18 @@ type WaybackResult struct {
 	ContentLength int       `json:"content_length"`
 }
 
-// Scan performs a search for historical endpoints in the Wayback Machine
-func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	domains, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for Wayback: %T", target)
+// DiscoverEndpoints implements EndpointDiscoverer.
+func (s *WaybackScanner) DiscoverEndpoints(ctx context.Context, project *models.Project, urls []string, opts ScanOptions) ([]*models.Endpoint, error) {
+	if len(urls) == 0 {
+		return nil, nil
 	}
 
-	if len(domains) == 0 {
-		return []WaybackResult{}, nil
-	}
+	s.logger.Debug("Starting Wayback scan for %d domains", len(urls))
 
-	s.logger.Debug("Starting Wayback scan for %d domains", len(domains))
-
-	allResults := []WaybackResult{}
+	var allResults []WaybackResult
 
 	// Process each domain separately
-	for _, domain := range domains {
+	for _, domain := range urls {
 		// Skip if the domain is not in scope
 		if !project.Scope.IsInScope(models.AssetTypeDomain, domain) {
 			s.logger.Debug("Skipping out-of-scope domain: %s", domain)
@@ -102,10 +97,8 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 
 		// Add limit if specified in options
 		limit := 1000 // Default limit
-		if options != nil {
-			if l, ok := options["limit"].(int); ok && l > 0 {
-				limit = l
-			}
+		if l, ok := opts.Extra["limit"].(int); ok && l > 0 {
+			limit = l
 		}
 		apiURL = fmt.Sprintf("%s&limit=%d", apiURL, limit)
 
@@ -148,12 +141,11 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 
 			originalURL := row[0]
 			mimeType := row[1]
-			
+
 			// Parse status code
 			statusCode := 0
 			if row[2] != "" {
 				if _, err := fmt.Sscanf(row[2], "%d", &statusCode); err != nil {
-					// If parsing fails, keep statusCode as 0 and continue
 					statusCode = 0
 				}
 			}
@@ -171,7 +163,6 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 			contentLength := 0
 			if row[4] != "" {
 				if _, err := fmt.Sscanf(row[4], "%d", &contentLength); err != nil {
-					// If parsing fails, keep contentLength as 0 and continue
 					contentLength = 0
 				}
 			}
@@ -213,6 +204,15 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 	}
 
 	return endpoints, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	domains, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for Wayback: %T", target)
+	}
+	return s.DiscoverEndpoints(ctx, project, domains, ScanOptions{Extra: options})
 }
 
 // waybackResultToEndpoint converts a WaybackResult to a models.Endpoint

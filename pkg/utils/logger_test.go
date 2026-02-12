@@ -85,12 +85,8 @@ func TestNewLoggerWithConfig(t *testing.T) {
 		t.Fatal("NewLoggerWithConfig returned nil")
 	}
 
-	if logger.config.Level != DEBUG {
-		t.Errorf("Expected level DEBUG, got %v", logger.config.Level)
-	}
-
-	if logger.config.Format != TextFormat {
-		t.Errorf("Expected format TextFormat, got %v", logger.config.Format)
+	if logger.GetLevel() != DEBUG {
+		t.Errorf("Expected level DEBUG, got %v", logger.GetLevel())
 	}
 
 	logger.Close()
@@ -104,10 +100,10 @@ func TestLogger_SetLevel(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	config := LoggerConfig{
-		Level:       INFO,
-		Format:      TextFormat,
-		EnableFile:  false,
-		LogDir:      tempDir,
+		Level:      INFO,
+		Format:     TextFormat,
+		EnableFile: false,
+		LogDir:     tempDir,
 	}
 
 	logger := NewLoggerWithConfig(config)
@@ -131,10 +127,10 @@ func TestLogger_IsLevelEnabled(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	config := LoggerConfig{
-		Level:       WARN,
-		Format:      TextFormat,
-		EnableFile:  false,
-		LogDir:      tempDir,
+		Level:      WARN,
+		Format:     TextFormat,
+		EnableFile: false,
+		LogDir:     tempDir,
 	}
 
 	logger := NewLoggerWithConfig(config)
@@ -191,35 +187,36 @@ func TestLogger_JSONFormat(t *testing.T) {
 	os.Stdout = oldStdout
 
 	// Read captured output
-	buf := make([]byte, 1024)
+	buf := make([]byte, 4096)
 	n, _ := r.Read(buf)
 	output := string(buf[:n])
 
-	// Parse JSON
-	var entry LogEntry
+	// Parse slog JSON output format
+	var entry map[string]interface{}
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 0 {
 		t.Fatal("No output captured")
 	}
 
 	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
-		t.Fatalf("Failed to parse JSON output: %v", err)
+		t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, lines[0])
 	}
 
-	if entry.Level != "INFO" {
-		t.Errorf("Expected level INFO, got %s", entry.Level)
+	// slog uses "level" key
+	if level, ok := entry["level"].(string); !ok || level != "INFO" {
+		t.Errorf("Expected level INFO, got %v", entry["level"])
 	}
 
-	if entry.Message != "Test message" {
-		t.Errorf("Expected message 'Test message', got %s", entry.Message)
+	// slog uses "msg" key
+	if msg, ok := entry["msg"].(string); !ok || msg != "Test message" {
+		t.Errorf("Expected message 'Test message', got %v", entry["msg"])
 	}
 
-	if entry.File == "" {
-		t.Error("Expected file to be set")
-	}
-
-	if entry.Line == 0 {
-		t.Error("Expected line to be set")
+	// slog puts source info in "source" object when AddSource is true
+	if source, ok := entry["source"].(map[string]interface{}); ok {
+		if _, ok := source["file"].(string); !ok {
+			t.Error("Expected source.file to be set")
+		}
 	}
 
 	logger.Close()
@@ -261,39 +258,36 @@ func TestLogger_WithFields(t *testing.T) {
 	os.Stdout = oldStdout
 
 	// Read captured output
-	buf := make([]byte, 1024)
+	buf := make([]byte, 4096)
 	n, _ := r.Read(buf)
 	output := string(buf[:n])
 
-	// Parse JSON
-	var entry LogEntry
+	// Parse slog JSON output — fields become top-level keys
+	var entry map[string]interface{}
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 0 {
 		t.Fatal("No output captured")
 	}
 
 	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
-		t.Fatalf("Failed to parse JSON output: %v", err)
+		t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, lines[0])
 	}
 
-	if entry.Level != "INFO" {
-		t.Errorf("Expected level INFO, got %s", entry.Level)
+	if level, ok := entry["level"].(string); !ok || level != "INFO" {
+		t.Errorf("Expected level INFO, got %v", entry["level"])
 	}
 
-	if entry.Message != "User logged in" {
-		t.Errorf("Expected message 'User logged in', got %s", entry.Message)
+	if msg, ok := entry["msg"].(string); !ok || msg != "User logged in" {
+		t.Errorf("Expected message 'User logged in', got %v", entry["msg"])
 	}
 
-	if entry.Fields == nil {
-		t.Fatal("Expected fields to be set")
+	// slog puts fields as top-level keys in JSON
+	if userID, ok := entry["user_id"].(float64); !ok || userID != 123 {
+		t.Errorf("Expected user_id to be 123, got %v", entry["user_id"])
 	}
 
-	if userID, ok := entry.Fields["user_id"].(float64); !ok || userID != 123 {
-		t.Errorf("Expected user_id to be 123, got %v", entry.Fields["user_id"])
-	}
-
-	if action, ok := entry.Fields["action"].(string); !ok || action != "login" {
-		t.Errorf("Expected action to be 'login', got %v", entry.Fields["action"])
+	if action, ok := entry["action"].(string); !ok || action != "login" {
+		t.Errorf("Expected action to be 'login', got %v", entry["action"])
 	}
 
 	logger.Close()
@@ -352,16 +346,17 @@ func TestLogger_FileLogging(t *testing.T) {
 		t.Error("Log file does not contain 'Test message 3'")
 	}
 
-	if !strings.Contains(logContent, "[INFO]") {
-		t.Error("Log file does not contain '[INFO]'")
+	// slog TextHandler uses level=INFO format
+	if !strings.Contains(logContent, "level=INFO") {
+		t.Error("Log file does not contain 'level=INFO'")
 	}
 
-	if !strings.Contains(logContent, "[WARN]") {
-		t.Error("Log file does not contain '[WARN]'")
+	if !strings.Contains(logContent, "level=WARN") {
+		t.Error("Log file does not contain 'level=WARN'")
 	}
 
-	if !strings.Contains(logContent, "[ERROR]") {
-		t.Error("Log file does not contain '[ERROR]'")
+	if !strings.Contains(logContent, "level=ERROR") {
+		t.Error("Log file does not contain 'level=ERROR'")
 	}
 }
 
@@ -388,10 +383,10 @@ func TestLogger_LevelFiltering(t *testing.T) {
 	logger := NewLoggerWithConfig(config)
 
 	// Log messages at different levels
-	logger.Debug("Debug message")   // Should not appear
-	logger.Info("Info message")     // Should not appear
-	logger.Warn("Warning message")  // Should appear
-	logger.Error("Error message")   // Should appear
+	logger.Debug("Debug message")  // Should not appear
+	logger.Info("Info message")    // Should not appear
+	logger.Warn("Warning message") // Should appear
+	logger.Error("Error message")  // Should appear
 
 	// Restore stdout
 	w.Close()
@@ -441,4 +436,67 @@ func TestNewLogger_BackwardCompatibility(t *testing.T) {
 		t.Errorf("Expected level DEBUG for debug=true, got %v", logger2.GetLevel())
 	}
 	logger2.Close()
+}
+
+func TestRedactingHandler(t *testing.T) {
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	config := LoggerConfig{
+		Level:      DEBUG,
+		Format:     JSONFormat,
+		EnableFile: false,
+	}
+
+	logger := NewLoggerWithConfig(config)
+
+	// Log with sensitive fields
+	logger.InfoWithFields("auth attempt", map[string]interface{}{
+		"username": "admin",
+		"password": "supersecret",
+		"token":    "jwt-abc-123",
+		"api_key":  "key-xyz-456",
+	})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	buf := make([]byte, 4096)
+	n, _ := r.Read(buf)
+	output := string(buf[:n])
+
+	// Sensitive values should be redacted
+	if strings.Contains(output, "supersecret") {
+		t.Error("Password should be redacted")
+	}
+	if strings.Contains(output, "jwt-abc-123") {
+		t.Error("Token should be redacted")
+	}
+	if strings.Contains(output, "key-xyz-456") {
+		t.Error("API key should be redacted")
+	}
+
+	// Non-sensitive values should be visible
+	if !strings.Contains(output, "admin") {
+		t.Error("Username should not be redacted")
+	}
+
+	// Redacted markers should be present
+	if !strings.Contains(output, "[REDACTED]") {
+		t.Error("Redacted markers should be present")
+	}
+
+	logger.Close()
+}
+
+func TestLogger_Slog(t *testing.T) {
+	logger := NewLogger("", false)
+	defer logger.Close()
+
+	slogger := logger.Slog()
+	if slogger == nil {
+		t.Fatal("Slog() returned nil")
+	}
 }

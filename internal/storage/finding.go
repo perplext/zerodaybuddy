@@ -9,84 +9,97 @@ import (
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 )
 
+// findingScanDest holds the intermediate scan targets for a finding row.
+type findingScanDest struct {
+	finding                                                                    models.Finding
+	findingType, confidence, url, details                                      sql.NullString
+	stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON string
+}
+
+// scanArgs returns pointers in column order for use with Scan/QueryRow.
+func (d *findingScanDest) scanArgs() []interface{} {
+	return []interface{}{
+		&d.finding.ID, &d.finding.ProjectID, &d.findingType, &d.finding.Title, &d.finding.Description,
+		&d.details, &d.finding.Severity, &d.confidence, &d.finding.Status, &d.url,
+		&d.finding.CVSS, &d.finding.CWE, &d.stepsJSON, &d.evidenceJSON, &d.evidenceMapJSON, &d.metadataJSON,
+		&d.finding.Impact, &d.finding.Remediation, &d.referencesJSON, &d.finding.FoundBy, &d.finding.FoundAt,
+		&d.affectedAssetsJSON, &d.finding.CreatedAt, &d.finding.UpdatedAt,
+	}
+}
+
+// hydrate populates nullable and JSON fields on the embedded finding.
+func (d *findingScanDest) hydrate() (*models.Finding, error) {
+	f := &d.finding
+
+	if d.findingType.Valid {
+		f.Type = models.FindingType(d.findingType.String)
+	} else {
+		f.Type = models.FindingTypeVulnerability
+	}
+	if d.confidence.Valid {
+		f.Confidence = models.FindingConfidence(d.confidence.String)
+	} else {
+		f.Confidence = models.ConfidenceMedium
+	}
+	if d.url.Valid {
+		f.URL = d.url.String
+	}
+	if d.details.Valid {
+		f.Details = d.details.String
+	}
+
+	if err := utils.FromJSON(d.stepsJSON, &f.Steps); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal steps: %w", err)
+	}
+
+	if d.evidenceMapJSON != "" && d.evidenceMapJSON != "null" && d.evidenceMapJSON != "[]" {
+		if err := utils.FromJSON(d.evidenceMapJSON, &f.Evidence); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal evidence map: %w", err)
+		}
+	} else if d.evidenceJSON != "" && d.evidenceJSON != "null" && d.evidenceJSON != "[]" {
+		var evidenceArray []models.Evidence
+		if err := utils.FromJSON(d.evidenceJSON, &evidenceArray); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal evidence array: %w", err)
+		}
+		f.Evidence = evidenceArray
+	}
+
+	if d.metadataJSON != "" && d.metadataJSON != "null" {
+		if err := utils.FromJSON(d.metadataJSON, &f.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+
+	if err := utils.FromJSON(d.referencesJSON, &f.References); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal references: %w", err)
+	}
+	if err := utils.FromJSON(d.affectedAssetsJSON, &f.AffectedAssets); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal affected assets: %w", err)
+	}
+
+	return f, nil
+}
+
+const findingSelectCols = `id, project_id, type, title, description, details, severity, confidence, status, url,
+			cvss, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
+			found_by, found_at, affected_assets_json, created_at, updated_at`
+
 // GetFinding retrieves a finding by ID
 func (s *SQLiteStore) GetFinding(ctx context.Context, id string) (*models.Finding, error) {
-	var finding models.Finding
-	var findingType, confidence, url, details sql.NullString
-	var stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON string
-	
-	err := s.db.QueryRowContext(ctx, `
-		SELECT 
-			id, project_id, type, title, description, details, severity, confidence, status, url,
-			cvss, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
-			found_by, found_at, affected_assets_json, created_at, updated_at
-		FROM findings
-		WHERE id = ?
-	`, id).Scan(
-		&finding.ID, &finding.ProjectID, &findingType, &finding.Title, &finding.Description,
-		&details, &finding.Severity, &confidence, &finding.Status, &url,
-		&finding.CVSS, &finding.CWE, &stepsJSON, &evidenceJSON, &evidenceMapJSON, &metadataJSON, &finding.Impact, &finding.Remediation,
-		&referencesJSON, &finding.FoundBy, &finding.FoundAt, &affectedAssetsJSON,
-		&finding.CreatedAt, &finding.UpdatedAt,
-	)
-	
+	var d findingScanDest
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT `+findingSelectCols+` FROM findings WHERE id = ?`, id,
+	).Scan(d.scanArgs()...)
+
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finding: %w", err)
 	}
-	
-	// Handle nullable fields
-	if findingType.Valid {
-		finding.Type = models.FindingType(findingType.String)
-	} else {
-		finding.Type = models.FindingTypeVulnerability
-	}
-	if confidence.Valid {
-		finding.Confidence = models.FindingConfidence(confidence.String)
-	} else {
-		finding.Confidence = models.ConfidenceMedium
-	}
-	if url.Valid {
-		finding.URL = url.String
-	}
-	if details.Valid {
-		finding.Details = details.String
-	}
-	
-	// Unmarshal JSON fields
-	if err := utils.FromJSON(stepsJSON, &finding.Steps); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal steps: %w", err)
-	}
-	
-	// Try to unmarshal evidence - first try as map, then as array
-	if evidenceMapJSON != "" && evidenceMapJSON != "null" && evidenceMapJSON != "[]" {
-		if err := utils.FromJSON(evidenceMapJSON, &finding.Evidence); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal evidence map: %w", err)
-		}
-	} else if evidenceJSON != "" && evidenceJSON != "null" && evidenceJSON != "[]" {
-		var evidenceArray []models.Evidence
-		if err := utils.FromJSON(evidenceJSON, &evidenceArray); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal evidence array: %w", err)
-		}
-		finding.Evidence = evidenceArray
-	}
-	
-	if metadataJSON != "" && metadataJSON != "null" {
-		if err := utils.FromJSON(metadataJSON, &finding.Metadata); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-		}
-	}
-	
-	if err := utils.FromJSON(referencesJSON, &finding.References); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal references: %w", err)
-	}
-	if err := utils.FromJSON(affectedAssetsJSON, &finding.AffectedAssets); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal affected assets: %w", err)
-	}
-	
-	return &finding, nil
+
+	return d.hydrate()
 }
 
 // UpdateFinding updates a finding
@@ -177,94 +190,32 @@ func (s *SQLiteStore) UpdateFinding(ctx context.Context, finding *models.Finding
 
 // ListFindings lists all findings for a project
 func (s *SQLiteStore) ListFindings(ctx context.Context, projectID string) ([]*models.Finding, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT 
-			id, project_id, type, title, description, details, severity, confidence, status, url,
-			cvss, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
-			found_by, found_at, affected_assets_json, created_at, updated_at
-		FROM findings
-		WHERE project_id = ?
-		ORDER BY created_at DESC
-	`, projectID)
-	
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+findingSelectCols+` FROM findings WHERE project_id = ? ORDER BY created_at DESC`,
+		projectID,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list findings: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var findings []*models.Finding
 	for rows.Next() {
-		var finding models.Finding
-		var findingType, confidence, url, details sql.NullString
-		var stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON string
-		
-		err := rows.Scan(
-			&finding.ID, &finding.ProjectID, &findingType, &finding.Title, &finding.Description,
-			&details, &finding.Severity, &confidence, &finding.Status, &url,
-			&finding.CVSS, &finding.CWE, &stepsJSON, &evidenceJSON, &evidenceMapJSON, &metadataJSON, &finding.Impact, &finding.Remediation,
-			&referencesJSON, &finding.FoundBy, &finding.FoundAt, &affectedAssetsJSON,
-			&finding.CreatedAt, &finding.UpdatedAt,
-		)
-		if err != nil {
+		var d findingScanDest
+		if err := rows.Scan(d.scanArgs()...); err != nil {
 			return nil, fmt.Errorf("failed to scan finding: %w", err)
 		}
-		
-		// Handle nullable fields
-		if findingType.Valid {
-			finding.Type = models.FindingType(findingType.String)
-		} else {
-			finding.Type = models.FindingTypeVulnerability
+		f, err := d.hydrate()
+		if err != nil {
+			return nil, err
 		}
-		if confidence.Valid {
-			finding.Confidence = models.FindingConfidence(confidence.String)
-		} else {
-			finding.Confidence = models.ConfidenceMedium
-		}
-		if url.Valid {
-			finding.URL = url.String
-		}
-		if details.Valid {
-			finding.Details = details.String
-		}
-		
-		// Unmarshal JSON fields
-		if err := utils.FromJSON(stepsJSON, &finding.Steps); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal steps: %w", err)
-		}
-		
-		// Try to unmarshal evidence - first try as map, then as array
-		if evidenceMapJSON != "" && evidenceMapJSON != "null" && evidenceMapJSON != "[]" {
-			if err := utils.FromJSON(evidenceMapJSON, &finding.Evidence); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal evidence map: %w", err)
-			}
-		} else if evidenceJSON != "" && evidenceJSON != "null" && evidenceJSON != "[]" {
-			var evidenceArray []models.Evidence
-			if err := utils.FromJSON(evidenceJSON, &evidenceArray); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal evidence array: %w", err)
-			}
-			finding.Evidence = evidenceArray
-		}
-		
-		if metadataJSON != "" && metadataJSON != "null" {
-			if err := utils.FromJSON(metadataJSON, &finding.Metadata); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-			}
-		}
-		
-		if err := utils.FromJSON(referencesJSON, &finding.References); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal references: %w", err)
-		}
-		if err := utils.FromJSON(affectedAssetsJSON, &finding.AffectedAssets); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal affected assets: %w", err)
-		}
-		
-		findings = append(findings, &finding)
+		findings = append(findings, f)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate findings: %w", err)
 	}
-	
+
 	return findings, nil
 }
 
