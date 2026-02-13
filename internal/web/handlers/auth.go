@@ -12,8 +12,9 @@ import (
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	authService *auth.Service
-	logger      *utils.Logger
+	authService  *auth.Service
+	logger       *utils.Logger
+	proxyEnabled bool
 }
 
 // NewAuthHandler creates a new auth handler
@@ -22,6 +23,11 @@ func NewAuthHandler(authService *auth.Service, logger *utils.Logger) *AuthHandle
 		authService: authService,
 		logger:      logger,
 	}
+}
+
+// SetProxyEnabled configures whether to trust proxy headers for IP extraction.
+func (h *AuthHandler) SetProxyEnabled(enabled bool) {
+	h.proxyEnabled = enabled
 }
 
 // Login handles user login
@@ -38,9 +44,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate and sanitize input
+	// Sanitize username only — never sanitize passwords (reduces entropy)
 	req.Username = validation.SanitizeString(req.Username)
-	req.Password = validation.SanitizeString(req.Password)
 	
 	if req.Username == "" || req.Password == "" {
 		http.Error(w, "Username and password are required", http.StatusBadRequest)
@@ -54,7 +59,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract client info
-	ipAddress := auth.ExtractIPAddress(r.RemoteAddr, r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Real-IP"))
+	ipAddress := auth.ExtractIPAddress(r.RemoteAddr, r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Real-IP"), h.proxyEnabled)
 	userAgent := r.Header.Get("User-Agent")
 
 	// Attempt login
@@ -120,12 +125,13 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse Bearer token
-	parts := authHeader[7:] // Remove "Bearer "
-	if len(parts) == 0 {
+	// Parse Bearer token safely (avoid panic on short headers)
+	const bearerPrefix = "Bearer "
+	if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
 		http.Error(w, "Invalid token format", http.StatusBadRequest)
 		return
 	}
+	parts := authHeader[len(bearerPrefix):]
 
 	// Logout
 	if err := h.authService.Logout(r.Context(), parts); err != nil {
@@ -206,10 +212,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate passwords
-	req.CurrentPassword = validation.SanitizeString(req.CurrentPassword)
-	req.NewPassword = validation.SanitizeString(req.NewPassword)
-	
+	// Never sanitize passwords — it reduces entropy
 	if req.CurrentPassword == "" || req.NewPassword == "" {
 		http.Error(w, "Current and new passwords are required", http.StatusBadRequest)
 		return
@@ -234,11 +237,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 // validateCreateUserRequest validates user creation request
 func (h *AuthHandler) validateCreateUserRequest(req *auth.CreateUserRequest) error {
-	// Sanitize all inputs
+	// Sanitize text inputs — never sanitize passwords
 	req.Username = validation.SanitizeString(req.Username)
 	req.Email = validation.SanitizeString(req.Email)
 	req.FullName = validation.SanitizeString(req.FullName)
-	req.Password = validation.SanitizeString(req.Password)
 	
 	// Validate username
 	if err := validation.Username(req.Username); err != nil {

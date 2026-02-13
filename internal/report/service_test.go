@@ -51,6 +51,14 @@ func (m *MockStore) GetReport(ctx context.Context, id string) (*models.Report, e
 	return args.Get(0).(*models.Report), args.Error(1)
 }
 
+func (m *MockStore) ListFindings(ctx context.Context, projectID string) ([]*models.Finding, error) {
+	args := m.Called(ctx, projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Finding), args.Error(1)
+}
+
 func (m *MockStore) ListReports(ctx context.Context, projectID string) ([]*models.Report, error) {
 	args := m.Called(ctx, projectID)
 	if args.Get(0) == nil {

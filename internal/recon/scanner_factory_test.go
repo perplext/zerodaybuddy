@@ -16,12 +16,12 @@ func TestNewScannerFactory(t *testing.T) {
 		},
 	}
 	logger := utils.NewLogger("", true)
-	
+
 	factory := NewScannerFactory(cfg, logger)
-	
+
 	assert.NotNil(t, factory)
-	assert.NotNil(t, factory.scanners)
-	assert.Greater(t, len(factory.scanners), 0)
+	assert.NotNil(t, factory.all)
+	assert.Greater(t, len(factory.all), 0)
 	assert.Equal(t, cfg, factory.config)
 	assert.Equal(t, logger, factory.logger)
 }
@@ -35,7 +35,7 @@ func TestScannerFactory_GetScanner(t *testing.T) {
 	}
 	logger := utils.NewLogger("", true)
 	factory := NewScannerFactory(cfg, logger)
-	
+
 	tests := []struct {
 		name        string
 		scannerName string
@@ -74,12 +74,22 @@ func TestScannerFactory_GetScanner(t *testing.T) {
 		},
 		{
 			name:        "Get existing scanner - wayback",
-			scannerName: "wayback",
+			scannerName: "waybackurls",
 			wantErr:     false,
 		},
 		{
 			name:        "Get existing scanner - nuclei",
 			scannerName: "nuclei",
+			wantErr:     false,
+		},
+		{
+			name:        "Get existing scanner - trivy",
+			scannerName: "trivy",
+			wantErr:     false,
+		},
+		{
+			name:        "Get existing scanner - gitleaks",
+			scannerName: "gitleaks",
 			wantErr:     false,
 		},
 		{
@@ -95,11 +105,11 @@ func TestScannerFactory_GetScanner(t *testing.T) {
 			errMsg:      "scanner '' not found",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scanner, err := factory.GetScanner(tt.scannerName)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, scanner)
@@ -124,12 +134,12 @@ func TestScannerFactory_ListScanners(t *testing.T) {
 	}
 	logger := utils.NewLogger("", true)
 	factory := NewScannerFactory(cfg, logger)
-	
+
 	scanners := factory.ListScanners()
-	
+
 	assert.NotEmpty(t, scanners)
-	assert.Equal(t, 8, len(scanners)) // We expect 8 scanners based on registerScanners()
-	
+	assert.Equal(t, 10, len(scanners))
+
 	// Check that we have all expected scanners
 	expectedScanners := []string{
 		"subfinder",
@@ -137,16 +147,18 @@ func TestScannerFactory_ListScanners(t *testing.T) {
 		"httpx",
 		"naabu",
 		"katana",
-		"wayback",
+		"waybackurls",
 		"ffuf",
 		"nuclei",
+		"trivy",
+		"gitleaks",
 	}
-	
+
 	scannerNames := make(map[string]bool)
 	for _, scanner := range scanners {
 		scannerNames[scanner.Name()] = true
 	}
-	
+
 	for _, expected := range expectedScanners {
 		assert.True(t, scannerNames[expected], "Expected scanner %s not found", expected)
 	}
@@ -161,7 +173,7 @@ func TestScannerFactory_GetScannersByType(t *testing.T) {
 	}
 	logger := utils.NewLogger("", true)
 	factory := NewScannerFactory(cfg, logger)
-	
+
 	tests := []struct {
 		name         string
 		scannerType  string
@@ -189,14 +201,14 @@ func TestScannerFactory_GetScannersByType(t *testing.T) {
 		{
 			name:         "Get content scanners",
 			scannerType:  "content",
-			expectedList: []string{"ffuf"},
-			count:        1,
+			expectedList: []string{"ffuf", "katana", "waybackurls"},
+			count:        3,
 		},
 		{
 			name:         "Get vulnerability scanners",
 			scannerType:  "vulnerability",
-			expectedList: []string{"nuclei"},
-			count:        1,
+			expectedList: []string{"nuclei", "trivy", "gitleaks"},
+			count:        3,
 		},
 		{
 			name:         "Get non-existing type",
@@ -211,24 +223,51 @@ func TestScannerFactory_GetScannersByType(t *testing.T) {
 			count:        0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scanners := factory.GetScannersByType(tt.scannerType)
-			
+
 			assert.Equal(t, tt.count, len(scanners))
-			
+
 			// Check that expected scanners are present
 			scannerNames := make(map[string]bool)
 			for _, scanner := range scanners {
 				scannerNames[scanner.Name()] = true
 			}
-			
+
 			for _, expected := range tt.expectedList {
 				assert.True(t, scannerNames[expected], "Expected scanner %s not found for type %s", expected, tt.scannerType)
 			}
 		})
 	}
+}
+
+func TestScannerRegistry_AutoCategorization(t *testing.T) {
+	cfg := config.Config{
+		Tools: config.ToolsConfig{
+			MaxThreads:       10,
+			DefaultRateLimit: 10,
+		},
+	}
+	logger := utils.NewLogger("", true)
+	registry := NewScannerRegistry(cfg, logger)
+
+	// Verify typed accessor methods return the correct scanners
+	subScanners := registry.SubdomainScanners()
+	assert.Len(t, subScanners, 2, "Expected 2 subdomain scanners")
+
+	probers := registry.HostProbers()
+	assert.Len(t, probers, 1, "Expected 1 host prober")
+
+	portScanners := registry.PortScanners()
+	assert.Len(t, portScanners, 1, "Expected 1 port scanner")
+
+	epScanners := registry.EndpointDiscoverers()
+	assert.Len(t, epScanners, 3, "Expected 3 endpoint discoverers")
+
+	vulnScanners := registry.VulnerabilityScanners()
+	assert.Len(t, vulnScanners, 3, "Expected 3 vulnerability scanners")
 }
 
 func TestScannerFactory_registerScanners(t *testing.T) {
@@ -239,37 +278,39 @@ func TestScannerFactory_registerScanners(t *testing.T) {
 		},
 	}
 	logger := utils.NewLogger("", true)
-	
-	// Create factory without registering scanners
-	factory := &ScannerFactory{
-		config:   cfg,
-		logger:   logger,
-		scanners: make(map[string]Scanner),
+
+	// Create registry without registering scanners
+	registry := &ScannerRegistry{
+		config: cfg,
+		logger: logger,
+		all:    make(map[string]Scanner),
 	}
-	
+
 	// Verify no scanners initially
-	assert.Empty(t, factory.scanners)
-	
+	assert.Empty(t, registry.all)
+
 	// Register scanners
-	factory.registerScanners()
-	
+	registry.registerDefaults()
+
 	// Verify all scanners are registered
-	assert.Len(t, factory.scanners, 8)
-	
+	assert.Len(t, registry.all, 10)
+
 	// Check specific scanners
 	expectedScanners := map[string]bool{
-		"subfinder": true,
-		"amass":     true,
-		"httpx":     true,
-		"naabu":     true,
-		"ffuf":      true,
-		"katana":    true,
-		"wayback":   true,
-		"nuclei":    true,
+		"subfinder":   true,
+		"amass":       true,
+		"httpx":       true,
+		"naabu":       true,
+		"ffuf":        true,
+		"katana":      true,
+		"waybackurls": true,
+		"nuclei":      true,
+		"trivy":       true,
+		"gitleaks":    true,
 	}
-	
+
 	for name := range expectedScanners {
-		scanner, err := factory.GetScanner(name)
+		scanner, err := registry.GetScanner(name)
 		assert.NoError(t, err)
 		assert.NotNil(t, scanner)
 		assert.Equal(t, name, scanner.Name())

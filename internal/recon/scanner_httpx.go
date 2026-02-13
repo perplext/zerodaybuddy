@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/perplext/zerodaybuddy/pkg/config"
@@ -21,7 +23,7 @@ type HTTPXScanner struct {
 }
 
 // NewHTTPXScanner creates a new httpx scanner
-func NewHTTPXScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewHTTPXScanner(config config.ToolsConfig, logger *utils.Logger) *HTTPXScanner {
 	return &HTTPXScanner{
 		config: config,
 		logger: logger,
@@ -49,18 +51,13 @@ type HTTPXResult struct {
 	ResponseTime   string `json:"response_time"`
 }
 
-// Scan performs HTTP probing on a list of hosts
-func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	domains, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for HTTPX: %T", target)
+// ProbeHosts implements HostProber.
+func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, hosts []string, opts ScanOptions) ([]*models.Host, error) {
+	if len(hosts) == 0 {
+		return nil, nil
 	}
 
-	if len(domains) == 0 {
-		return []HTTPXResult{}, nil
-	}
-
-	s.logger.Debug("Starting HTTPX scan for %d domains", len(domains))
+	s.logger.Debug("Starting HTTPX scan for %d domains", len(hosts))
 
 	// Ensure we have the path to httpx
 	httpxPath := s.config.HTTPXPath
@@ -79,7 +76,7 @@ func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target
 	outputFile := filepath.Join(tempDir, "httpx_output.json")
 
 	// Write domains to the temporary file
-	if err := os.WriteFile(domainsFile, []byte(strings.Join(domains, "\n")), 0644); err != nil {
+	if err := os.WriteFile(domainsFile, []byte(strings.Join(hosts, "\n")), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write domains to file: %v", err)
 	}
 
@@ -136,7 +133,76 @@ func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target
 		}
 	}
 
-	s.logger.Debug("HTTPX found %d HTTP endpoints from %d domains", len(results), len(domains))
+	s.logger.Debug("HTTPX found %d HTTP endpoints from %d domains", len(results), len(hosts))
 
-	return results, nil
+	// Convert HTTPXResult to []*models.Host for downstream consumption
+	modelHosts := make([]*models.Host, 0, len(results))
+	for _, r := range results {
+		host := httpxResultToHost(r, project.ID)
+		modelHosts = append(modelHosts, host)
+	}
+
+	return modelHosts, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *HTTPXScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	hosts, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for HTTPX: %T", target)
+	}
+	return s.ProbeHosts(ctx, project, hosts, ScanOptions{Extra: options})
+}
+
+// httpxResultToHost converts an HTTPXResult to a models.Host
+func httpxResultToHost(r HTTPXResult, projectID string) *models.Host {
+	host := &models.Host{
+		ProjectID: projectID,
+		Type:      models.AssetTypeDomain,
+		Status:    "alive",
+		FoundBy:   "httpx",
+	}
+
+	// Parse the URL to extract host/port
+	if u, err := url.Parse(r.URL); err == nil {
+		host.Value = u.Hostname()
+		if port := u.Port(); port != "" {
+			if p, err := strconv.Atoi(port); err == nil {
+				host.Ports = append(host.Ports, p)
+			}
+		} else if u.Scheme == "https" {
+			host.Ports = []int{443}
+		} else {
+			host.Ports = []int{80}
+		}
+	} else {
+		host.Value = r.URL
+	}
+
+	host.Title = r.Title
+
+	// Parse technologies from comma-separated string
+	if r.TechnologyList != "" {
+		host.Technologies = strings.Split(r.TechnologyList, ",")
+		for i, tech := range host.Technologies {
+			host.Technologies[i] = strings.TrimSpace(tech)
+		}
+	}
+
+	// Store additional metadata in Headers map
+	host.Headers = make(map[string]string)
+	if r.WebServer != "" {
+		host.Headers["Server"] = r.WebServer
+	}
+	if r.StatusCode > 0 {
+		host.Headers["status_code"] = strconv.Itoa(r.StatusCode)
+	}
+	if r.ContentLength > 0 {
+		host.Headers["content_length"] = strconv.Itoa(r.ContentLength)
+	}
+	if r.ResponseTime != "" {
+		host.Headers["response_time"] = r.ResponseTime
+	}
+
+	return host
 }

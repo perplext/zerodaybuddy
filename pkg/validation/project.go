@@ -3,6 +3,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/perplext/zerodaybuddy/pkg/models"
 )
@@ -44,7 +45,7 @@ func ProjectScope(ctx context.Context, store ProjectStore, projectName string, t
 		for _, asset := range project.Scope.InScope {
 			if asset.Type == models.AssetTypeDomain || asset.Type == models.AssetTypeURL {
 				// Simple contains check - in production, use proper domain matching
-				if contains(target, asset.Value) {
+				if strings.Contains(target, asset.Value) {
 					return nil
 				}
 			}
@@ -67,16 +68,3 @@ func isURL(s string) bool {
 	return len(s) > 7 && (s[:7] == "http://" || s[:8] == "https://")
 }
 
-// Helper function for simple contains check
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && containsHelper(s, substr)
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

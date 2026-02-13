@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/perplext/zerodaybuddy/internal/core"
+	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/internal/storage/migrations"
 	pkgerrors "github.com/perplext/zerodaybuddy/pkg/errors"
 	"github.com/perplext/zerodaybuddy/pkg/validation"
@@ -228,13 +229,20 @@ func createMigrateCreateCommand(app *core.App) *cobra.Command {
 func openDatabase(app *core.App) (*sqlx.DB, error) {
 	// Get database path from config
 	dbPath := fmt.Sprintf("%s/zerodaybuddy.db", app.GetConfig().DataDir)
-	
+
 	// Open database connection
-	db, err := sqlx.Connect("sqlite3", dbPath)
+	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
 		return nil, pkgerrors.InternalError("failed to connect to database", err).
 			WithContext("dbPath", dbPath)
 	}
-	
+
+	// Apply shared SQLite PRAGMAs
+	if err := storage.ConfigureSQLite(db); err != nil {
+		db.Close()
+		return nil, pkgerrors.InternalError("failed to configure database", err).
+			WithContext("dbPath", dbPath)
+	}
+
 	return db, nil
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/perplext/zerodaybuddy/internal/storage/migrations"
 	pkgerrors "github.com/perplext/zerodaybuddy/pkg/errors"
@@ -13,7 +14,7 @@ import (
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Common errors (kept for backward compatibility)
@@ -44,6 +45,7 @@ type Store interface {
 	GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
 	UpdateEndpoint(ctx context.Context, endpoint *models.Endpoint) error
 	ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error)
+	ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error)
 	DeleteEndpoint(ctx context.Context, id string) error
 	
 	// Finding methods
@@ -66,11 +68,13 @@ type Store interface {
 	ListReports(ctx context.Context, projectID string) ([]*models.Report, error)
 	DeleteReport(ctx context.Context, id string) error
 	
+	// Bulk methods
+	BulkCreateHosts(ctx context.Context, hosts []*models.Host) error
+	BulkCreateEndpoints(ctx context.Context, endpoints []*models.Endpoint) error
+	BulkCreateFindings(ctx context.Context, findings []*models.Finding) error
+
 	// Close closes the database connection
 	Close() error
-	
-	// DB returns the underlying database connection
-	DB() *sqlx.DB
 }
 
 // SQLiteStore implements the Store interface using SQLite
@@ -80,9 +84,9 @@ type SQLiteStore struct {
 }
 
 // NewStore creates a new storage instance
-func NewStore(dataDir string) (Store, error) {
-	// Ensure the data directory exists
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+func NewStore(dataDir string) (*SQLiteStore, error) {
+	// Ensure the data directory exists (restricted perms — contains database)
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return nil, pkgerrors.InternalError("failed to create data directory", err).
 			WithContext("dataDir", dataDir)
 	}
@@ -91,7 +95,7 @@ func NewStore(dataDir string) (Store, error) {
 	dbPath := filepath.Join(dataDir, "zerodaybuddy.db")
 	
 	// Create database connection
-	db, err := sqlx.Connect("sqlite3", dbPath)
+	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
 		return nil, pkgerrors.InternalError("failed to connect to database", err).
 			WithContext("dbPath", dbPath)
@@ -112,170 +116,40 @@ func NewStore(dataDir string) (Store, error) {
 	return store, nil
 }
 
+// ConfigureSQLite applies performance and safety PRAGMAs to a SQLite connection.
+func ConfigureSQLite(db *sqlx.DB) error {
+	// SQLite only supports one writer — serialise all access through a single connection.
+	db.SetMaxOpenConns(1)
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=10000",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=-20000",
+		"PRAGMA temp_store=MEMORY",
+		"PRAGMA foreign_keys=ON",
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			return fmt.Errorf("failed to set %s: %w", p, err)
+		}
+	}
+	return nil
+}
+
 // initDatabaseWithMigrations initializes the database using migrations
 func (s *SQLiteStore) initDatabaseWithMigrations() error {
-	// Enable foreign keys
-	if _, err := s.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return fmt.Errorf("failed to enable foreign keys: %w", err)
+	// Configure SQLite for performance and safety
+	if err := ConfigureSQLite(s.db); err != nil {
+		return err
 	}
-	
+
 	// Run migrations
 	migrator := migrations.NewMigrator(s.db)
 	ctx := context.Background()
 	
 	if err := migrator.Migrate(ctx); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-	
-	return nil
-}
-
-// initDatabase initializes the database schema (deprecated - use migrations)
-func (s *SQLiteStore) initDatabase() error {
-	// Enable foreign keys
-	if _, err := s.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return fmt.Errorf("failed to enable foreign keys: %w", err)
-	}
-	
-	// Create projects table
-	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS projects (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			handle TEXT NOT NULL,
-			platform TEXT NOT NULL,
-			description TEXT,
-			start_date TIMESTAMP NOT NULL,
-			end_date TIMESTAMP,
-			status TEXT NOT NULL,
-			scope_json TEXT NOT NULL,
-			notes TEXT,
-			created_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP NOT NULL,
-			UNIQUE(name)
-		)
-	`); err != nil {
-		return fmt.Errorf("failed to create projects table: %w", err)
-	}
-	
-	// Create hosts table
-	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS hosts (
-			id TEXT PRIMARY KEY,
-			project_id TEXT NOT NULL,
-			type TEXT NOT NULL,
-			value TEXT NOT NULL,
-			ip TEXT,
-			status TEXT NOT NULL,
-			title TEXT,
-			technologies_json TEXT,
-			ports_json TEXT,
-			headers_json TEXT,
-			screenshot TEXT,
-			notes TEXT,
-			found_by TEXT NOT NULL,
-			created_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP NOT NULL,
-			FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
-			UNIQUE(project_id, value)
-		)
-	`); err != nil {
-		return fmt.Errorf("failed to create hosts table: %w", err)
-	}
-	
-	// Create endpoints table
-	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS endpoints (
-			id TEXT PRIMARY KEY,
-			project_id TEXT NOT NULL,
-			host_id TEXT NOT NULL,
-			url TEXT NOT NULL,
-			method TEXT,
-			status INTEGER,
-			content_type TEXT,
-			title TEXT,
-			parameters_json TEXT,
-			notes TEXT,
-			found_by TEXT NOT NULL,
-			created_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP NOT NULL,
-			FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
-			FOREIGN KEY(host_id) REFERENCES hosts(id) ON DELETE CASCADE,
-			UNIQUE(host_id, url, method)
-		)
-	`); err != nil {
-		return fmt.Errorf("failed to create endpoints table: %w", err)
-	}
-	
-	// Create findings table
-	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS findings (
-			id TEXT PRIMARY KEY,
-			project_id TEXT NOT NULL,
-			title TEXT NOT NULL,
-			description TEXT NOT NULL,
-			severity TEXT NOT NULL,
-			status TEXT NOT NULL,
-			cvss REAL,
-			cwe TEXT,
-			steps_json TEXT,
-			evidence_json TEXT,
-			impact TEXT,
-			remediation TEXT,
-			references_json TEXT,
-			found_by TEXT NOT NULL,
-			found_at TIMESTAMP NOT NULL,
-			affected_assets_json TEXT,
-			created_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP NOT NULL,
-			FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-		)
-	`); err != nil {
-		return fmt.Errorf("failed to create findings table: %w", err)
-	}
-	
-	// Create tasks table
-	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS tasks (
-			id TEXT PRIMARY KEY,
-			project_id TEXT NOT NULL,
-			type TEXT NOT NULL,
-			name TEXT NOT NULL,
-			description TEXT,
-			status TEXT NOT NULL,
-			priority TEXT,
-			assigned_to TEXT,
-			progress INTEGER NOT NULL,
-			details_json TEXT,
-			result_json TEXT,
-			metadata_json TEXT,
-			started_at TIMESTAMP NOT NULL,
-			completed_at TIMESTAMP,
-			created_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP NOT NULL,
-			FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-		)
-	`); err != nil {
-		return fmt.Errorf("failed to create tasks table: %w", err)
-	}
-	
-	// Create reports table
-	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS reports (
-			id TEXT PRIMARY KEY,
-			project_id TEXT NOT NULL,
-			finding_id TEXT,
-			title TEXT NOT NULL,
-			format TEXT NOT NULL,
-			content TEXT NOT NULL,
-			metadata_json TEXT,
-			created_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP NOT NULL,
-			FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
-			FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE
-		)
-	`); err != nil {
-		return fmt.Errorf("failed to create reports table: %w", err)
 	}
 	
 	return nil
@@ -719,7 +593,7 @@ func isUniqueConstraintError(err error) bool {
 		return false
 	}
 	// SQLite returns "UNIQUE constraint failed" in error message
-	return contains(err.Error(), "UNIQUE constraint failed")
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 // isForeignKeyConstraintError checks if an error is a foreign key constraint violation
@@ -728,21 +602,7 @@ func isForeignKeyConstraintError(err error) bool {
 		return false
 	}
 	// SQLite returns "FOREIGN KEY constraint failed" in error message
-	return contains(err.Error(), "FOREIGN KEY constraint failed")
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && containsSubstring(s, substr)
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
 }
 
 // For the sake of example, I'll implement one more method to show the pattern

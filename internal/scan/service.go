@@ -3,11 +3,12 @@ package scan
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
-	
+
 	"github.com/perplext/zerodaybuddy/internal/recon"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	"github.com/perplext/zerodaybuddy/pkg/models"
@@ -15,34 +16,111 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-// Service provides vulnerability scanning functionality
-type Service struct {
-	store  interface {
-		GetProject(ctx context.Context, id string) (*models.Project, error)
-		GetHost(ctx context.Context, id string) (*models.Host, error)
-		GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
-		ListHosts(ctx context.Context, projectID string) ([]*models.Host, error)
-		ListEndpoints(ctx context.Context, projectID string) ([]*models.Endpoint, error)
-		CreateFinding(ctx context.Context, finding *models.Finding) error
-		CreateTask(ctx context.Context, task *models.Task) error
-		UpdateTask(ctx context.Context, task *models.Task) error
+// internalCIDRs are IP ranges that must never be scanned (SSRF protection).
+var internalCIDRs []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"0.0.0.0/8",       // "this" network
+		"127.0.0.0/8",     // loopback
+		"10.0.0.0/8",      // RFC 1918
+		"172.16.0.0/12",   // RFC 1918
+		"192.168.0.0/16",  // RFC 1918
+		"169.254.0.0/16",  // link-local / cloud metadata
+		"100.64.0.0/10",   // RFC 6598 shared address space
+		"192.0.0.0/24",    // IETF protocol assignments
+		"198.18.0.0/15",   // benchmarking
+		"::1/128",         // IPv6 loopback
+		"fc00::/7",        // IPv6 ULA
+		"fe80::/10",       // IPv6 link-local
+	} {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Sprintf("invalid internal CIDR %q: %v", cidr, err))
+		}
+		internalCIDRs = append(internalCIDRs, network)
 	}
-	config config.Config
-	logger *utils.Logger
-	scannerFactory ScannerFactory
 }
 
-// NewService creates a new scanning service
-func NewService(store interface {
+// isInternalIP returns true if the given IP falls within a blocked CIDR range.
+func isInternalIP(ip net.IP) bool {
+	for _, cidr := range internalCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// isInternalHost returns true if the hostname resolves to a private/internal IP.
+// Note: When passing URLs to external tools (e.g. nuclei), there is an inherent
+// TOCTOU window where DNS could resolve differently between this check and the
+// tool's connection. This is a best-effort pre-filter; network-level controls
+// (e.g. firewall rules blocking RFC 1918 egress) are recommended for defense in depth.
+func isInternalHost(hostname string) bool {
+	// If the hostname is already an IP address, check it directly
+	if ip := net.ParseIP(hostname); ip != nil {
+		return isInternalIP(ip)
+	}
+
+	ips, err := net.LookupHost(hostname)
+	if err != nil {
+		return true // fail closed — if we can't resolve, block it
+	}
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		if isInternalIP(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterSSRFURLs removes URLs that resolve to internal/private IPs.
+func filterSSRFURLs(urls []string, logger *utils.Logger) []string {
+	var safe []string
+	for _, u := range urls {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			logger.Warn("Skipping malformed URL: %s", u)
+			continue
+		}
+		hostname := parsed.Hostname()
+		if isInternalHost(hostname) {
+			logger.Warn("Blocked SSRF attempt — %s resolves to internal IP", hostname)
+			continue
+		}
+		safe = append(safe, u)
+	}
+	return safe
+}
+
+// ScanStore defines the storage methods used by the scan service.
+type ScanStore interface {
 	GetProject(ctx context.Context, id string) (*models.Project, error)
 	GetHost(ctx context.Context, id string) (*models.Host, error)
 	GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error)
 	ListHosts(ctx context.Context, projectID string) ([]*models.Host, error)
-	ListEndpoints(ctx context.Context, projectID string) ([]*models.Endpoint, error)
+	ListEndpoints(ctx context.Context, hostID string) ([]*models.Endpoint, error)
+	ListEndpointsByProject(ctx context.Context, projectID string) ([]*models.Endpoint, error)
 	CreateFinding(ctx context.Context, finding *models.Finding) error
 	CreateTask(ctx context.Context, task *models.Task) error
 	UpdateTask(ctx context.Context, task *models.Task) error
-}, config config.Config, logger *utils.Logger) *Service {
+}
+
+// Service provides vulnerability scanning functionality
+type Service struct {
+	store          ScanStore
+	config         config.Config
+	logger         *utils.Logger
+	scannerFactory ScannerFactory
+}
+
+// NewService creates a new scanning service
+func NewService(store ScanStore, config config.Config, logger *utils.Logger) *Service {
 	return &Service{
 		store:  store,
 		config: config,
@@ -125,7 +203,7 @@ func (s *Service) ScanTarget(ctx context.Context, projectID string, target strin
 
 // scanAllEndpoints scans all discovered endpoints in the project
 func (s *Service) scanAllEndpoints(ctx context.Context, project *models.Project, task *models.Task, concurrency int) error {
-	endpoints, err := s.store.ListEndpoints(ctx, project.ID)
+	endpoints, err := s.store.ListEndpointsByProject(ctx, project.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list endpoints: %w", err)
 	}
@@ -166,11 +244,11 @@ func (s *Service) scanHost(ctx context.Context, project *models.Project, hostID 
 		return fmt.Errorf("host does not belong to project")
 	}
 	
-	endpoints, err := s.store.ListEndpoints(ctx, project.ID)
+	endpoints, err := s.store.ListEndpointsByProject(ctx, project.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list endpoints: %w", err)
 	}
-	
+
 	// Filter endpoints for this host
 	var urls []string
 	for _, endpoint := range endpoints {
@@ -229,6 +307,13 @@ func (s *Service) scanURL(ctx context.Context, project *models.Project, target s
 // runNucleiScan executes nuclei scanner on the given URLs
 func (s *Service) runNucleiScan(ctx context.Context, project *models.Project, urls []string, task *models.Task, concurrency int) error {
 	if len(urls) == 0 {
+		return nil
+	}
+
+	// SSRF protection — drop URLs that resolve to internal IPs
+	urls = filterSSRFURLs(urls, s.logger)
+	if len(urls) == 0 {
+		s.logger.Info("No external URLs remain after SSRF filtering")
 		return nil
 	}
 	

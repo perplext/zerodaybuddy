@@ -125,17 +125,25 @@ func (rl *RateLimiter) ReserveN(service string, n int) *rate.Reservation {
 // getLimiter returns the rate limiter for a service, creating it if necessary
 func (rl *RateLimiter) getLimiter(service string) *serviceRateLimiter {
 	rl.mu.RLock()
-	if limiter, exists := rl.limiters[service]; exists {
-		limiter.lastAccessed = time.Now()
-		rl.mu.RUnlock()
-		return limiter
-	}
+	_, exists := rl.limiters[service]
 	rl.mu.RUnlock()
-	
+
+	if exists {
+		// Re-verify under write lock (entry may have been evicted between RUnlock and Lock)
+		rl.mu.Lock()
+		if current, ok := rl.limiters[service]; ok {
+			current.lastAccessed = time.Now()
+			rl.mu.Unlock()
+			return current
+		}
+		rl.mu.Unlock()
+		// Limiter was evicted; fall through to create a new one
+	}
+
 	// Create new limiter
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	
+
 	// Double-check after acquiring write lock
 	if limiter, exists := rl.limiters[service]; exists {
 		limiter.lastAccessed = time.Now()

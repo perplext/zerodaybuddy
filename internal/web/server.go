@@ -71,13 +71,25 @@ func (s *Server) Start(ctx context.Context, host string, port int) error {
 		IdleTimeout:  60 * time.Second,
 	}
 	
+	// Warn if binding to non-localhost without TLS
+	if !s.config.EnableTLS && host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		s.logger.Warn("Web server binding to %s without TLS — traffic is unencrypted", host)
+	}
+
 	// Start server in a goroutine
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.config.EnableTLS {
+			s.logger.Info("TLS enabled with cert=%s key=%s", s.config.TLSCertFile, s.config.TLSKeyFile)
+			err = s.server.ListenAndServeTLS(s.config.TLSCertFile, s.config.TLSKeyFile)
+		} else {
+			err = s.server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			s.logger.Error("Failed to start web server: %v", err)
 		}
 	}()
-	
+
 	s.logger.Info("Web server started on %s", addr)
 	return nil
 }

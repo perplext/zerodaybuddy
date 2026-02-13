@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -86,14 +88,23 @@ func (a *App) Initialize(ctx context.Context) error {
 	a.platforms["bugcrowd"] = platform.NewBugcrowdWithRateLimiter(a.config.Bugcrowd, a.logger, a.rateLimiter)
 	
 	// Initialize services
-	// Create auth store from main store
+	// Create auth store directly from the SQLite store's DB connection
 	authStore := auth.NewSQLStore(store.DB())
 	
-	// Generate JWT secret if not provided
+	// Auto-generate JWT secret if not configured
 	jwtSecret := a.config.WebServer.JWTSecret
 	if jwtSecret == "" {
-		jwtSecret = "development-secret-key-change-in-production"
-		a.logger.Warn("Using default JWT secret - change this in production!")
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return fmt.Errorf("failed to generate JWT secret: %w", err)
+		}
+		jwtSecret = hex.EncodeToString(b)
+		a.config.WebServer.JWTSecret = jwtSecret
+		if err := a.config.Save(); err != nil {
+			a.logger.Warn("Generated JWT secret but failed to save config: %v", err)
+		} else {
+			a.logger.Info("Generated and saved random JWT secret")
+		}
 	}
 	
 	jwtIssuer := a.config.WebServer.JWTIssuer
@@ -389,8 +400,13 @@ func (a *App) Serve(ctx context.Context, host string, port int) error {
 		return fmt.Errorf("failed to initialize: %w", err)
 	}
 	
+	// Refuse to start web server with a known-insecure JWT secret
+	if a.config.WebServer.JWTSecret == "development-secret-key-change-in-production" {
+		return fmt.Errorf("refusing to start web server with hardcoded JWT secret; run 'zerodaybuddy init' or set jwt_secret in config")
+	}
+
 	a.logger.Info("Starting web server on %s:%d", host, port)
-	
+
 	// Ensure services are initialized
 	if a.webSvc == nil {
 		return fmt.Errorf("web service not initialized")

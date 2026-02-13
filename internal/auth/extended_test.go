@@ -352,6 +352,7 @@ func TestExtractIPAddress(t *testing.T) {
 		remoteAddr     string
 		xForwardedFor  string
 		xRealIP        string
+		proxyEnabled   bool
 		expected       string
 	}{
 		{
@@ -365,22 +366,39 @@ func TestExtractIPAddress(t *testing.T) {
 			expected:   "192.168.1.100",
 		},
 		{
-			name:          "X-Forwarded-For header",
+			name:          "X-Forwarded-For trusted when proxy enabled",
 			remoteAddr:    "127.0.0.1:8080",
 			xForwardedFor: "203.0.113.195, 70.41.3.18, 150.172.238.178",
-			expected:      "203.0.113.195",
+			proxyEnabled:  true,
+			expected:      "150.172.238.178", // rightmost valid IP
 		},
 		{
-			name:       "X-Real-IP header",
-			remoteAddr: "127.0.0.1:8080",
-			xRealIP:    "203.0.113.195",
-			expected:   "203.0.113.195",
+			name:          "X-Forwarded-For ignored when proxy disabled",
+			remoteAddr:    "127.0.0.1:8080",
+			xForwardedFor: "203.0.113.195",
+			proxyEnabled:  false,
+			expected:      "127.0.0.1",
 		},
 		{
-			name:          "X-Forwarded-For takes precedence",
+			name:         "X-Real-IP trusted when proxy enabled",
+			remoteAddr:   "127.0.0.1:8080",
+			xRealIP:      "203.0.113.195",
+			proxyEnabled: true,
+			expected:     "203.0.113.195",
+		},
+		{
+			name:         "X-Real-IP ignored when proxy disabled",
+			remoteAddr:   "127.0.0.1:8080",
+			xRealIP:      "203.0.113.195",
+			proxyEnabled: false,
+			expected:     "127.0.0.1",
+		},
+		{
+			name:          "X-Forwarded-For takes precedence over X-Real-IP",
 			remoteAddr:    "127.0.0.1:8080",
 			xForwardedFor: "203.0.113.195",
 			xRealIP:       "10.0.0.1",
+			proxyEnabled:  true,
 			expected:      "203.0.113.195",
 		},
 		{
@@ -388,6 +406,7 @@ func TestExtractIPAddress(t *testing.T) {
 			remoteAddr:    "127.0.0.1:8080",
 			xForwardedFor: "invalid-ip",
 			xRealIP:       "203.0.113.195",
+			proxyEnabled:  true,
 			expected:      "203.0.113.195",
 		},
 		{
@@ -395,13 +414,14 @@ func TestExtractIPAddress(t *testing.T) {
 			remoteAddr:    "192.168.1.100:8080",
 			xForwardedFor: "invalid-ip",
 			xRealIP:       "also-invalid",
+			proxyEnabled:  true,
 			expected:      "192.168.1.100",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractIPAddress(tt.remoteAddr, tt.xForwardedFor, tt.xRealIP)
+			result := ExtractIPAddress(tt.remoteAddr, tt.xForwardedFor, tt.xRealIP, tt.proxyEnabled)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

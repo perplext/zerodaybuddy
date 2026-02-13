@@ -7,97 +7,154 @@ import (
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 )
 
-// ScannerFactory creates and provides scanner instances
-type ScannerFactory struct {
+// ScannerRegistry creates, registers, and provides scanner instances.
+// It auto-categorizes scanners by interface type assertions.
+type ScannerRegistry struct {
 	config config.Config
 	logger *utils.Logger
-	scanners map[string]Scanner
+
+	all                 map[string]Scanner
+	subdomainScanners   []SubdomainScanner
+	hostProbers         []HostProber
+	portScanners        []PortScanner
+	endpointDiscoverers []EndpointDiscoverer
+	vulnScanners        []VulnerabilityScanner
 }
 
-// NewScannerFactory creates a new scanner factory
-func NewScannerFactory(config config.Config, logger *utils.Logger) *ScannerFactory {
-	factory := &ScannerFactory{
-		config:   config,
-		logger:   logger,
-		scanners: make(map[string]Scanner),
+// ScannerFactory is an alias for backward compatibility.
+type ScannerFactory = ScannerRegistry
+
+// NewScannerRegistry creates a new scanner registry and registers all known scanners.
+func NewScannerRegistry(cfg config.Config, logger *utils.Logger) *ScannerRegistry {
+	r := &ScannerRegistry{
+		config: cfg,
+		logger: logger,
+		all:    make(map[string]Scanner),
 	}
-
-	// Initialize all supported scanners
-	factory.registerScanners()
-	
-	return factory
+	r.registerDefaults()
+	return r
 }
 
-// registerScanners initializes and registers all supported scanners
-func (f *ScannerFactory) registerScanners() {
-	// Register subdomain discovery scanners
-	f.scanners["subfinder"] = NewSubfinderScanner(f.config.Tools, f.logger)
-	f.scanners["amass"] = NewAmassScanner(f.config.Tools, f.logger)
-	
-	// Register HTTP probing scanners
-	f.scanners["httpx"] = NewHTTPXScanner(f.config.Tools, f.logger)
-	
-	// Register port scanning tools
-	f.scanners["naabu"] = NewNaabuScanner(f.config.Tools, f.logger)
-	
-	// Register content discovery tools
-	f.scanners["ffuf"] = NewFFUFScanner(f.config.Tools, f.logger)
-	
-	// Register crawling tools
-	f.scanners["katana"] = NewKatanaScanner(f.config.Tools, f.logger)
-	f.scanners["wayback"] = NewWaybackScanner(f.config.Tools, f.logger)
-	
-	// Register vulnerability scanning tools
-	f.scanners["nuclei"] = NewNucleiScanner(f.config.Tools, f.logger)
+// NewScannerFactory is a backward-compatible alias for NewScannerRegistry.
+func NewScannerFactory(cfg config.Config, logger *utils.Logger) *ScannerRegistry {
+	return NewScannerRegistry(cfg, logger)
 }
 
-// GetScanner returns a scanner by name
-func (f *ScannerFactory) GetScanner(name string) (Scanner, error) {
-	scanner, exists := f.scanners[name]
+// Register adds a scanner and auto-categorizes it by the typed interfaces it implements.
+func (r *ScannerRegistry) Register(scanner Scanner) {
+	r.all[scanner.Name()] = scanner
+
+	if s, ok := scanner.(SubdomainScanner); ok {
+		r.subdomainScanners = append(r.subdomainScanners, s)
+	}
+	if s, ok := scanner.(HostProber); ok {
+		r.hostProbers = append(r.hostProbers, s)
+	}
+	if s, ok := scanner.(PortScanner); ok {
+		r.portScanners = append(r.portScanners, s)
+	}
+	if s, ok := scanner.(EndpointDiscoverer); ok {
+		r.endpointDiscoverers = append(r.endpointDiscoverers, s)
+	}
+	if s, ok := scanner.(VulnerabilityScanner); ok {
+		r.vulnScanners = append(r.vulnScanners, s)
+	}
+}
+
+// registerDefaults initializes and registers all built-in scanners.
+func (r *ScannerRegistry) registerDefaults() {
+	r.Register(NewSubfinderScanner(r.config.Tools, r.logger))
+	r.Register(NewAmassScanner(r.config.Tools, r.logger))
+	r.Register(NewHTTPXScanner(r.config.Tools, r.logger))
+	r.Register(NewNaabuScanner(r.config.Tools, r.logger))
+	r.Register(NewFFUFScanner(r.config.Tools, r.logger))
+	r.Register(NewKatanaScanner(r.config.Tools, r.logger))
+	r.Register(NewWaybackScanner(r.config.Tools, r.logger))
+	r.Register(NewNucleiScanner(r.config.Tools, r.logger))
+	r.Register(NewTrivyScanner(r.config.Tools, r.logger))
+	r.Register(NewGitleaksScanner(r.config.Tools, r.logger))
+}
+
+// GetScanner returns a scanner by name.
+func (r *ScannerRegistry) GetScanner(name string) (Scanner, error) {
+	scanner, exists := r.all[name]
 	if !exists {
 		return nil, fmt.Errorf("scanner '%s' not found", name)
 	}
 	return scanner, nil
 }
 
-// ListScanners returns a list of all available scanners
-func (f *ScannerFactory) ListScanners() []Scanner {
-	scanners := make([]Scanner, 0, len(f.scanners))
-	for _, scanner := range f.scanners {
+// ListScanners returns all registered scanners.
+func (r *ScannerRegistry) ListScanners() []Scanner {
+	scanners := make([]Scanner, 0, len(r.all))
+	for _, scanner := range r.all {
 		scanners = append(scanners, scanner)
 	}
 	return scanners
 }
 
-// GetScannerByType returns all scanners of a specific type
-func (f *ScannerFactory) GetScannersByType(scannerType string) []Scanner {
+// SubdomainScanners returns all scanners that implement SubdomainScanner.
+func (r *ScannerRegistry) SubdomainScanners() []SubdomainScanner {
+	return r.subdomainScanners
+}
+
+// HostProbers returns all scanners that implement HostProber.
+func (r *ScannerRegistry) HostProbers() []HostProber {
+	return r.hostProbers
+}
+
+// PortScanners returns all scanners that implement PortScanner.
+func (r *ScannerRegistry) PortScanners() []PortScanner {
+	return r.portScanners
+}
+
+// EndpointDiscoverers returns all scanners that implement EndpointDiscoverer.
+func (r *ScannerRegistry) EndpointDiscoverers() []EndpointDiscoverer {
+	return r.endpointDiscoverers
+}
+
+// VulnerabilityScanners returns all scanners that implement VulnerabilityScanner.
+func (r *ScannerRegistry) VulnerabilityScanners() []VulnerabilityScanner {
+	return r.vulnScanners
+}
+
+// GetScannersByType returns scanners matching a type string.
+// Kept for backward compatibility; prefer the typed accessor methods.
+func (r *ScannerRegistry) GetScannersByType(scannerType string) []Scanner {
 	var result []Scanner
-	
+
 	switch scannerType {
 	case "subdomain":
-		if s, ok := f.scanners["subfinder"]; ok {
-			result = append(result, s)
-		}
-		if s, ok := f.scanners["amass"]; ok {
-			result = append(result, s)
+		for _, s := range r.subdomainScanners {
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "http":
-		if s, ok := f.scanners["httpx"]; ok {
-			result = append(result, s)
+		for _, s := range r.hostProbers {
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "port":
-		if s, ok := f.scanners["naabu"]; ok {
-			result = append(result, s)
+		for _, s := range r.portScanners {
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "content":
-		if s, ok := f.scanners["ffuf"]; ok {
-			result = append(result, s)
+		for _, s := range r.endpointDiscoverers {
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	case "vulnerability":
-		if s, ok := f.scanners["nuclei"]; ok {
-			result = append(result, s)
+		for _, s := range r.vulnScanners {
+			if sc, ok := s.(Scanner); ok {
+				result = append(result, sc)
+			}
 		}
 	}
-	
+
 	return result
 }

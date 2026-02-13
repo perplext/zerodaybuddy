@@ -1,15 +1,13 @@
 package utils
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -18,15 +16,10 @@ import (
 type LogLevel int
 
 const (
-	// DEBUG level for detailed troubleshooting information
 	DEBUG LogLevel = iota
-	// INFO level for general operational information
 	INFO
-	// WARN level for potentially harmful situations
 	WARN
-	// ERROR level for error events that might still allow the application to continue
 	ERROR
-	// FATAL level for severe error events that will lead the application to abort
 	FATAL
 )
 
@@ -48,22 +41,30 @@ func (l LogLevel) String() string {
 	}
 }
 
+// toSlogLevel converts a LogLevel to slog.Level
+func (l LogLevel) toSlogLevel() slog.Level {
+	switch l {
+	case DEBUG:
+		return slog.LevelDebug
+	case INFO:
+		return slog.LevelInfo
+	case WARN:
+		return slog.LevelWarn
+	case ERROR:
+		return slog.LevelError
+	case FATAL:
+		return slog.LevelError + 4 // Custom level above Error
+	default:
+		return slog.LevelInfo
+	}
+}
+
 // LogFormat represents the log output format
 type LogFormat string
 
 const (
 	TextFormat LogFormat = "text"
 	JSONFormat LogFormat = "json"
-)
-
-// ANSI color codes
-const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorYellow = "\033[33m"
-	colorBlue   = "\033[34m"
-	colorGray   = "\033[37m"
-	colorWhite  = "\033[97m"
 )
 
 // LoggerConfig holds configuration for the logger
@@ -79,12 +80,67 @@ type LoggerConfig struct {
 	Compress     bool
 }
 
-// Logger is a configurable logger with support for different log levels and formats
+// Logger wraps slog.Logger with printf-style convenience methods and
+// sensitive field redaction. It preserves the existing API while delegating
+// to Go's standard structured logging.
 type Logger struct {
-	config     LoggerConfig
-	logger     *log.Logger
-	fileLogger *log.Logger
-	logFile    io.WriteCloser
+	slog    *slog.Logger
+	level   *slog.LevelVar
+	logFile io.WriteCloser
+}
+
+// sensitiveKeys is the set of field names whose values are redacted in log output.
+var sensitiveKeys = map[string]bool{
+	"password": true, "secret": true, "token": true,
+	"api_key": true, "apikey": true, "authorization": true,
+	"cookie": true, "credentials": true, "credential": true,
+	"current_password": true, "new_password": true,
+}
+
+// RedactingHandler wraps an slog.Handler and masks values of sensitive keys.
+type RedactingHandler struct {
+	inner slog.Handler
+}
+
+func (h *RedactingHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.inner.Enabled(ctx, level)
+}
+
+func (h *RedactingHandler) Handle(ctx context.Context, r slog.Record) error {
+	// Clone the record with redacted attributes
+	redacted := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	r.Attrs(func(a slog.Attr) bool {
+		redacted.AddAttrs(h.redactAttr(a))
+		return true
+	})
+	return h.inner.Handle(ctx, redacted)
+}
+
+func (h *RedactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	var redacted []slog.Attr
+	for _, a := range attrs {
+		redacted = append(redacted, h.redactAttr(a))
+	}
+	return &RedactingHandler{inner: h.inner.WithAttrs(redacted)}
+}
+
+func (h *RedactingHandler) WithGroup(name string) slog.Handler {
+	return &RedactingHandler{inner: h.inner.WithGroup(name)}
+}
+
+func (h *RedactingHandler) redactAttr(a slog.Attr) slog.Attr {
+	if sensitiveKeys[strings.ToLower(a.Key)] {
+		return slog.String(a.Key, "[REDACTED]")
+	}
+	if a.Value.Kind() == slog.KindGroup {
+		attrs := a.Value.Group()
+		var redacted []slog.Attr
+		for _, ga := range attrs {
+			redacted = append(redacted, h.redactAttr(ga))
+		}
+		return slog.Attr{Key: a.Key, Value: slog.GroupValue(redacted...)}
+	}
+	return a
 }
 
 // NewLogger creates a new logger instance
@@ -100,43 +156,52 @@ func NewLogger(logDir string, debug bool) *Logger {
 		MaxAge:       30,
 		Compress:     true,
 	}
-	
 	if debug {
 		config.Level = DEBUG
 	}
-	
 	return NewLoggerWithConfig(config)
 }
 
 // NewLoggerWithConfig creates a new logger instance with the given configuration
 func NewLoggerWithConfig(config LoggerConfig) *Logger {
-	logger := &Logger{
-		config: config,
+	l := &Logger{
+		level: new(slog.LevelVar),
 	}
+	l.level.Set(config.Level.toSlogLevel())
 
-	// Create console logger
-	logger.logger = log.New(os.Stdout, "", 0)
-
-	// Create file logger if enabled
+	// Build the writer: console only, or console + file
+	var w io.Writer = os.Stdout
 	if config.EnableFile && config.LogDir != "" {
 		if err := os.MkdirAll(config.LogDir, 0755); err != nil {
-			log.Fatalf("Failed to create log directory: %v", err)
+			fmt.Fprintf(os.Stderr, "Failed to create log directory: %v\n", err)
+			os.Exit(1)
 		}
-
-		// Use lumberjack for log rotation
 		logFile := &lumberjack.Logger{
 			Filename:   filepath.Join(config.LogDir, "zerodaybuddy.log"),
-			MaxSize:    config.MaxFileSize, // MB
+			MaxSize:    config.MaxFileSize,
 			MaxBackups: config.MaxBackups,
-			MaxAge:     config.MaxAge, // days
+			MaxAge:     config.MaxAge,
 			Compress:   config.Compress,
 		}
-
-		logger.fileLogger = log.New(logFile, "", 0)
-		logger.logFile = logFile
+		l.logFile = logFile
+		w = io.MultiWriter(os.Stdout, logFile)
 	}
 
-	return logger
+	// Build the slog handler (text or JSON), wrapped by RedactingHandler
+	opts := &slog.HandlerOptions{
+		Level:     l.level,
+		AddSource: true,
+	}
+	var handler slog.Handler
+	if config.Format == JSONFormat {
+		handler = slog.NewJSONHandler(w, opts)
+	} else {
+		handler = slog.NewTextHandler(w, opts)
+	}
+	handler = &RedactingHandler{inner: handler}
+
+	l.slog = slog.New(handler)
+	return l
 }
 
 // ParseLogLevel parses a string log level to LogLevel
@@ -157,219 +222,101 @@ func ParseLogLevel(level string) LogLevel {
 	}
 }
 
-// SetLevel sets the logger's level
+// SetLevel changes the log level at runtime.
 func (l *Logger) SetLevel(level LogLevel) {
-	l.config.Level = level
+	l.level.Set(level.toSlogLevel())
 }
 
-// getColorForLevel returns the ANSI color code for a log level
-func (l *Logger) getColorForLevel(level LogLevel) string {
-	if !l.config.EnableColors {
-		return ""
-	}
-	
-	switch level {
-	case DEBUG:
-		return colorGray
-	case INFO:
-		return colorBlue
-	case WARN:
-		return colorYellow
-	case ERROR:
-		return colorRed
-	case FATAL:
-		return colorRed
+// GetLevel returns the current log level
+func (l *Logger) GetLevel() LogLevel {
+	sl := l.level.Level()
+	switch {
+	case sl <= slog.LevelDebug:
+		return DEBUG
+	case sl <= slog.LevelInfo:
+		return INFO
+	case sl <= slog.LevelWarn:
+		return WARN
+	case sl <= slog.LevelError:
+		return ERROR
 	default:
-		return colorWhite
+		return FATAL
 	}
 }
 
-// LogEntry represents a structured log entry
-type LogEntry struct {
-	Timestamp string            `json:"timestamp"`
-	Level     string            `json:"level"`
-	Message   string            `json:"message"`
-	File      string            `json:"file,omitempty"`
-	Line      int               `json:"line,omitempty"`
-	Fields    map[string]interface{} `json:"fields,omitempty"`
+// IsLevelEnabled checks if a log level is enabled
+func (l *Logger) IsLevelEnabled(level LogLevel) bool {
+	return l.slog.Enabled(context.Background(), level.toSlogLevel())
 }
 
-// log logs a message with the given level
-func (l *Logger) log(level LogLevel, format string, args ...interface{}) {
-	if level < l.config.Level {
-		return
-	}
-
-	// Get caller information
-	_, file, line, ok := runtime.Caller(2)
-	if !ok {
-		file = "unknown"
-		line = 0
-	}
-	// Extract just the file name from the path
-	file = filepath.Base(file)
-
-	// Format message
-	message := fmt.Sprintf(format, args...)
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-
-	// Format based on configuration
-	var consoleMessage, fileMessage string
-	
-	if l.config.Format == JSONFormat {
-		entry := LogEntry{
-			Timestamp: timestamp,
-			Level:     level.String(),
-			Message:   message,
-			File:      file,
-			Line:      line,
-		}
-		
-		jsonBytes, _ := json.Marshal(entry)
-		consoleMessage = string(jsonBytes)
-		fileMessage = string(jsonBytes)
-	} else {
-		// Text format
-		color := l.getColorForLevel(level)
-		reset := ""
-		if color != "" {
-			reset = colorReset
-		}
-		
-		baseMessage := fmt.Sprintf("[%s] [%s] [%s:%d] %s", timestamp, level.String(), file, line, message)
-		consoleMessage = fmt.Sprintf("%s%s%s", color, baseMessage, reset)
-		fileMessage = baseMessage
-	}
-
-	// Log to console
-	l.logger.Println(consoleMessage)
-
-	// Log to file if enabled
-	if l.config.EnableFile && l.fileLogger != nil {
-		l.fileLogger.Println(fileMessage)
-	}
-
-	// Exit if FATAL
-	if level == FATAL {
-		l.Close()
-		os.Exit(1)
-	}
-}
-
-// logWithFields logs a message with additional structured fields
-func (l *Logger) logWithFields(level LogLevel, message string, fields map[string]interface{}) {
-	if level < l.config.Level {
-		return
-	}
-
-	// Get caller information
-	_, file, line, ok := runtime.Caller(2)
-	if !ok {
-		file = "unknown"
-		line = 0
-	}
-	file = filepath.Base(file)
-
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-
-	if l.config.Format == JSONFormat {
-		entry := LogEntry{
-			Timestamp: timestamp,
-			Level:     level.String(),
-			Message:   message,
-			File:      file,
-			Line:      line,
-			Fields:    fields,
-		}
-		
-		jsonBytes, _ := json.Marshal(entry)
-		consoleMessage := string(jsonBytes)
-		
-		l.logger.Println(consoleMessage)
-		if l.config.EnableFile && l.fileLogger != nil {
-			l.fileLogger.Println(consoleMessage)
-		}
-	} else {
-		// For text format, append fields as key=value pairs
-		fieldsStr := ""
-		if len(fields) > 0 {
-			var pairs []string
-			for k, v := range fields {
-				pairs = append(pairs, fmt.Sprintf("%s=%v", k, v))
-			}
-			fieldsStr = " " + strings.Join(pairs, " ")
-		}
-		
-		color := l.getColorForLevel(level)
-		reset := ""
-		if color != "" {
-			reset = colorReset
-		}
-		
-		baseMessage := fmt.Sprintf("[%s] [%s] [%s:%d] %s%s", timestamp, level.String(), file, line, message, fieldsStr)
-		consoleMessage := fmt.Sprintf("%s%s%s", color, baseMessage, reset)
-		
-		l.logger.Println(consoleMessage)
-		if l.config.EnableFile && l.fileLogger != nil {
-			l.fileLogger.Println(baseMessage)
-		}
-	}
-
-	if level == FATAL {
-		l.Close()
-		os.Exit(1)
-	}
-}
-
-// Debug logs a debug message
+// Debug logs a debug message (printf-style)
 func (l *Logger) Debug(format string, args ...interface{}) {
-	l.log(DEBUG, format, args...)
+	l.slog.Debug(fmt.Sprintf(format, args...))
 }
 
-// Info logs an info message
+// Info logs an info message (printf-style)
 func (l *Logger) Info(format string, args ...interface{}) {
-	l.log(INFO, format, args...)
+	l.slog.Info(fmt.Sprintf(format, args...))
 }
 
-// Warn logs a warning message
+// Warn logs a warning message (printf-style)
 func (l *Logger) Warn(format string, args ...interface{}) {
-	l.log(WARN, format, args...)
+	l.slog.Warn(fmt.Sprintf(format, args...))
 }
 
-// Error logs an error message
+// Error logs an error message (printf-style)
 func (l *Logger) Error(format string, args ...interface{}) {
-	l.log(ERROR, format, args...)
+	l.slog.Error(fmt.Sprintf(format, args...))
 }
 
 // Fatal logs a fatal message and exits
 func (l *Logger) Fatal(format string, args ...interface{}) {
-	l.log(FATAL, format, args...)
+	l.slog.Log(context.Background(), slog.LevelError+4, fmt.Sprintf(format, args...))
+	l.Close()
+	os.Exit(1)
 }
 
-// Structured logging methods with fields
+// DebugWithFields logs a debug message with structured key-value pairs
 func (l *Logger) DebugWithFields(message string, fields map[string]interface{}) {
-	l.logWithFields(DEBUG, message, fields)
+	l.slog.Debug(message, mapToAttrs(fields)...)
 }
 
+// InfoWithFields logs an info message with structured key-value pairs
 func (l *Logger) InfoWithFields(message string, fields map[string]interface{}) {
-	l.logWithFields(INFO, message, fields)
+	l.slog.Info(message, mapToAttrs(fields)...)
 }
 
+// WarnWithFields logs a warning message with structured key-value pairs
 func (l *Logger) WarnWithFields(message string, fields map[string]interface{}) {
-	l.logWithFields(WARN, message, fields)
+	l.slog.Warn(message, mapToAttrs(fields)...)
 }
 
+// ErrorWithFields logs an error message with structured key-value pairs
 func (l *Logger) ErrorWithFields(message string, fields map[string]interface{}) {
-	l.logWithFields(ERROR, message, fields)
+	l.slog.Error(message, mapToAttrs(fields)...)
 }
 
+// FatalWithFields logs a fatal message with structured fields and exits
 func (l *Logger) FatalWithFields(message string, fields map[string]interface{}) {
-	l.logWithFields(FATAL, message, fields)
+	l.slog.Log(context.Background(), slog.LevelError+4, message, mapToAttrs(fields)...)
+	l.Close()
+	os.Exit(1)
+}
+
+// LogSecure logs an object with sensitive data masked (handled by RedactingHandler)
+func (l *Logger) LogSecure(level LogLevel, message string, obj interface{}) {
+	l.slog.Log(context.Background(), level.toSlogLevel(), message, "data", obj)
 }
 
 // GetWriter returns an io.Writer for the log file
 func (l *Logger) GetWriter() io.Writer {
 	return l.logFile
+}
+
+// Slog returns the underlying *slog.Logger for callers that want
+// direct access to structured logging.
+func (l *Logger) Slog() *slog.Logger {
+	return l.slog
 }
 
 // Close closes the log file
@@ -379,75 +326,11 @@ func (l *Logger) Close() {
 	}
 }
 
-// GetLevel returns the current log level
-func (l *Logger) GetLevel() LogLevel {
-	return l.config.Level
-}
-
-// IsLevelEnabled checks if a log level is enabled
-func (l *Logger) IsLevelEnabled(level LogLevel) bool {
-	return level >= l.config.Level
-}
-
-// LogSecure logs an object with sensitive data masked
-// This method will mask common sensitive field names
-func (l *Logger) LogSecure(level LogLevel, message string, obj interface{}) {
-	if level < l.config.Level {
-		return
+// mapToAttrs converts a map to slog key-value pairs
+func mapToAttrs(fields map[string]interface{}) []any {
+	attrs := make([]any, 0, len(fields)*2)
+	for k, v := range fields {
+		attrs = append(attrs, k, v)
 	}
-	
-	// Convert to JSON, then mask sensitive fields
-	jsonBytes, err := json.Marshal(obj)
-	if err != nil {
-		l.Error("Failed to marshal object for secure logging: %v", err)
-		return
-	}
-	
-	// Parse as generic map to mask sensitive fields
-	var data map[string]interface{}
-	if err := json.Unmarshal(jsonBytes, &data); err != nil {
-		l.Error("Failed to unmarshal object for secure logging: %v", err)
-		return
-	}
-	
-	// Mask sensitive fields
-	maskSensitiveFields(data)
-	
-	// Re-marshal masked data
-	maskedBytes, err := json.Marshal(data)
-	if err != nil {
-		l.Error("Failed to marshal masked object: %v", err)
-		return
-	}
-	
-	// Log the masked version
-	l.log(level, "%s: %s", message, string(maskedBytes))
-}
-
-// maskSensitiveFields recursively masks sensitive data in a map
-func maskSensitiveFields(data map[string]interface{}) {
-	sensitiveFields := []string{
-		"password", "Password", "PASSWORD",
-		"secret", "Secret", "SECRET",
-		"token", "Token", "TOKEN",
-		"key", "Key", "KEY",
-		"credential", "Credential", "CREDENTIAL",
-		"current_password", "new_password",
-		"CurrentPassword", "NewPassword",
-	}
-	
-	for key, value := range data {
-		// Check if this field should be masked
-		for _, sensitive := range sensitiveFields {
-			if key == sensitive {
-				data[key] = "[REDACTED]"
-				break
-			}
-		}
-		
-		// Recursively handle nested objects
-		if nested, ok := value.(map[string]interface{}); ok {
-			maskSensitiveFields(nested)
-		}
-	}
+	return attrs
 }

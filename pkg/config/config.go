@@ -19,6 +19,7 @@ type Config struct {
 	// Platform API configuration
 	HackerOne HackerOneConfig `mapstructure:"hackerone"`
 	Bugcrowd  BugcrowdConfig  `mapstructure:"bugcrowd"`
+	Immunefi  ImmunefiConfig  `mapstructure:"immunefi"`
 
 	// Web server configuration
 	WebServer WebServerConfig `mapstructure:"web_server"`
@@ -40,6 +41,11 @@ type BugcrowdConfig struct {
 	Email       string `mapstructure:"email"`
 	CookieValue string `mapstructure:"cookie_value"`
 	APIUrl      string `mapstructure:"api_url"`
+}
+
+// ImmunefiConfig holds Immunefi platform configuration
+type ImmunefiConfig struct {
+	APIUrl string `mapstructure:"api_url"`
 }
 
 // LoggingConfig holds logging configuration
@@ -80,6 +86,8 @@ type ToolsConfig struct {
 	KatanaPath      string `mapstructure:"katana_path"`
 	FFUFPath        string `mapstructure:"ffuf_path"`
 	WaybackPath     string `mapstructure:"wayback_path"`
+	TrivyPath       string `mapstructure:"trivy_path"`
+	GitleaksPath    string `mapstructure:"gitleaks_path"`
 	MaxThreads      int    `mapstructure:"max_threads"`
 	DefaultRateLimit int    `mapstructure:"default_rate_limit"` // Requests per minute
 	DefaultWordlist string `mapstructure:"default_wordlist"`
@@ -250,13 +258,13 @@ tools:
   default_rate_limit: 100
 `
 
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(configFile), 0755); err != nil {
+	// Create the directory with restricted permissions (config contains API keys)
+	if err := os.MkdirAll(filepath.Dir(configFile), 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Write the default configuration
-	if err := os.WriteFile(configFile, []byte(defaultConfig), 0644); err != nil {
+	// Write the default configuration with restricted permissions
+	if err := os.WriteFile(configFile, []byte(defaultConfig), 0600); err != nil {
 		return fmt.Errorf("failed to write default config: %w", err)
 	}
 

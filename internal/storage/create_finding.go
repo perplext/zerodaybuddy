@@ -67,13 +67,13 @@ func (s *SQLiteStore) CreateFinding(ctx context.Context, finding *models.Finding
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO findings (
 			id, project_id, type, title, description, details, severity, confidence, status, url,
-			cvss, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
+			cvss, cvss_vector, cvss_version, cwe, steps_json, evidence_json, evidence_map_json, metadata_json, impact, remediation, references_json,
 			found_by, found_at, affected_assets_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		finding.ID, finding.ProjectID, finding.Type, finding.Title, finding.Description,
 		finding.Details, finding.Severity, finding.Confidence, finding.Status, finding.URL,
-		finding.CVSS, finding.CWE, stepsJSON, "[]", evidenceJSON, metadataJSON, finding.Impact, finding.Remediation, 
+		finding.CVSS, finding.CVSSVector, finding.CVSSVersion, finding.CWE, stepsJSON, "[]", evidenceJSON, metadataJSON, finding.Impact, finding.Remediation,
 		referencesJSON, finding.FoundBy, finding.FoundAt, affectedAssetsJSON,
 		finding.CreatedAt, finding.UpdatedAt)
 	

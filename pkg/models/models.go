@@ -1,7 +1,9 @@
 package models
 
 import (
+	"net"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -13,8 +15,11 @@ const (
 	AssetTypeIP      AssetType = "ip"
 	AssetTypeURL     AssetType = "url"
 	AssetTypeMobile  AssetType = "mobile"
-	AssetTypeBinary  AssetType = "binary"
-	AssetTypeOther   AssetType = "other"
+	AssetTypeBinary         AssetType = "binary"
+	AssetTypeContainer      AssetType = "container"
+	AssetTypeSmartContract  AssetType = "smart_contract"
+	AssetTypeRepository     AssetType = "repository"
+	AssetTypeOther          AssetType = "other"
 )
 
 // ProjectType represents the type of a project
@@ -125,7 +130,7 @@ func (s *Scope) IsInScope(assetType AssetType, value string) bool {
 	// If we're checking a subdomain and the parent domain is in scope
 	if assetType == AssetTypeDomain {
 		for _, asset := range s.InScope {
-			if asset.Type == AssetTypeDomain && isSubdomain(asset.Value, value) {
+			if asset.Type == AssetTypeDomain && isSubdomain(value, asset.Value) {
 				return true
 			}
 		}
@@ -135,8 +140,15 @@ func (s *Scope) IsInScope(assetType AssetType, value string) bool {
 	if assetType == AssetTypeURL {
 		u, err := url.Parse(value)
 		if err == nil && u.Host != "" {
+			host := u.Hostname() // strip port
+			// First check if the domain is explicitly out of scope
+			for _, asset := range s.OutOfScope {
+				if asset.Type == AssetTypeDomain && matchAsset(asset.Value, host) {
+					return false
+				}
+			}
 			for _, asset := range s.InScope {
-				if asset.Type == AssetTypeDomain && (asset.Value == u.Host || isSubdomain(asset.Value, u.Host)) {
+				if asset.Type == AssetTypeDomain && (asset.Value == host || isSubdomain(host, asset.Value)) {
 					return true
 				}
 			}
@@ -223,6 +235,8 @@ type Finding struct {
 	Status      FindingStatus  `json:"status"`
 	URL         string         `json:"url,omitempty"`
 	CVSS        float64        `json:"cvss,omitempty"`
+	CVSSVector  string         `json:"cvss_vector,omitempty"`
+	CVSSVersion string         `json:"cvss_version,omitempty"` // "3.1" or "4.0"
 	CWE         string         `json:"cwe,omitempty"`
 	Steps       []string       `json:"steps"`
 	Evidence    interface{}    `json:"evidence"` // Can be []Evidence or map[string]interface{}
@@ -277,15 +291,58 @@ type Task struct {
 	UpdatedAt   time.Time              `json:"updated_at"`
 }
 
-// matchAsset checks if a value matches an asset pattern
-// Handles exact matches and wildcard patterns
+// matchAsset checks if a value matches an asset pattern.
+// Supports exact matches, wildcard patterns (*.example.com), and CIDR ranges.
 func matchAsset(pattern, value string) bool {
-	// TODO: Implement pattern matching for wildcards like *.example.com
-	return pattern == value
+	// Exact match
+	if pattern == value {
+		return true
+	}
+
+	// Extract hostname from URL values for domain-based matching
+	checkValue := value
+	if strings.Contains(value, "://") {
+		if u, err := url.Parse(value); err == nil && u.Host != "" {
+			checkValue = u.Hostname() // strips port
+		}
+	}
+
+	// Wildcard pattern matching (e.g., *.example.com)
+	if strings.HasPrefix(pattern, "*.") {
+		parentDomain := pattern[2:] // strip "*."
+		return isSubdomain(checkValue, parentDomain)
+	}
+
+	// CIDR range matching (e.g., 10.0.0.0/8)
+	if strings.Contains(pattern, "/") {
+		_, cidr, err := net.ParseCIDR(pattern)
+		if err == nil {
+			ip := net.ParseIP(checkValue)
+			if ip != nil {
+				return cidr.Contains(ip)
+			}
+		}
+	}
+
+	// If value was a URL, also try exact match against extracted hostname
+	if checkValue != value && checkValue == pattern {
+		return true
+	}
+
+	return false
 }
 
-// isSubdomain checks if a domain is a subdomain of another
-func isSubdomain(parent, child string) bool {
-	// TODO: Implement proper subdomain checking
-	return false
+// isSubdomain checks if child is a subdomain of parent.
+// For example, isSubdomain("sub.example.com", "example.com") returns true.
+// isSubdomain("example.com", "example.com") returns false (exact match, not a subdomain).
+func isSubdomain(child, parent string) bool {
+	child = strings.ToLower(strings.TrimSuffix(child, "."))
+	parent = strings.ToLower(strings.TrimSuffix(parent, "."))
+
+	if child == parent {
+		return false
+	}
+
+	// Child must end with ".parent"
+	return strings.HasSuffix(child, "."+parent)
 }

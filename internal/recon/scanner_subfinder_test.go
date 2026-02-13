@@ -35,12 +35,8 @@ func TestNewSubfinderScanner(t *testing.T) {
 	scanner := NewSubfinderScanner(config, logger)
 	
 	assert.NotNil(t, scanner)
-	
-	// Cast to concrete type to check fields
-	subfinderScanner, ok := scanner.(*SubfinderScanner)
-	assert.True(t, ok)
-	assert.Equal(t, config, subfinderScanner.config)
-	assert.Equal(t, logger, subfinderScanner.logger)
+	assert.Equal(t, config, scanner.config)
+	assert.Equal(t, logger, scanner.logger)
 }
 
 func TestSubfinderScanner_Name(t *testing.T) {
@@ -261,12 +257,8 @@ func TestSubfinderScanner_configOptions(t *testing.T) {
 			logger := utils.NewLogger("", true)
 			scanner := NewSubfinderScanner(tt.config, logger)
 			
-			// Cast to concrete type
-			subfinderScanner, ok := scanner.(*SubfinderScanner)
-			assert.True(t, ok)
-			
 			// Check config
-			assert.Equal(t, tt.config, subfinderScanner.config)
+			assert.Equal(t, tt.config, scanner.config)
 		})
 	}
 }

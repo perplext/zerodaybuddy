@@ -1,0 +1,96 @@
+version: 2
+
+project_name: zerodaybuddy
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./... -short
+
+builds:
+  - id: zerodaybuddy
+    main: ./cmd/zerodaybuddy
+    binary: zerodaybuddy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/perplext/zerodaybuddy/internal/version.Version={{.Version}}
+      - -X github.com/perplext/zerodaybuddy/internal/version.GitCommit={{.ShortCommit}}
+      - -X github.com/perplext/zerodaybuddy/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+    cmd: cyclonedx-gomod
+    args:
+      - app
+      - -json
+      - -output
+      - "$document"
+      - -main
+      - ./cmd/zerodaybuddy
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+  groups:
+    - title: "Security"
+      regexp: '^.*?security(\(.+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "Features"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 2
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: perplext
+    name: zerodaybuddy
+  draft: false
+  prerelease: auto
+  name_template: "ZeroDayBuddy v{{.Version}}"

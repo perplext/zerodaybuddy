@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ func setupTestDB(t *testing.T) (*sqlx.DB, func()) {
 	require.NoError(t, err)
 	tmpfile.Close()
 
-	db, err := sqlx.Connect("sqlite3", tmpfile.Name())
+	db, err := sqlx.Connect("sqlite", tmpfile.Name())
 	require.NoError(t, err)
 
 	cleanup := func() {

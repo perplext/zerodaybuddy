@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/perplext/zerodaybuddy/pkg/config"
@@ -21,7 +22,7 @@ type NucleiScanner struct {
 }
 
 // NewNucleiScanner creates a new Nuclei scanner
-func NewNucleiScanner(config config.ToolsConfig, logger *utils.Logger) Scanner {
+func NewNucleiScanner(config config.ToolsConfig, logger *utils.Logger) *NucleiScanner {
 	return &NucleiScanner{
 		config: config,
 		logger: logger,
@@ -63,24 +64,20 @@ type NucleiResultInfo struct {
 	Reference      []string `json:"reference,omitempty"`
 	Severity       string   `json:"severity"`
 	Classification struct {
-		CVEIDs []string `json:"cve-id,omitempty"`
-		CVSSScore  string   `json:"cvss-score,omitempty"`
-		CVE     string   `json:"cve,omitempty"`
+		CVEIDs    []string `json:"cve-id,omitempty"`
+		CWEIDs    []string `json:"cwe-id,omitempty"`
+		CVSSScore string   `json:"cvss-score,omitempty"`
+		CVE       string   `json:"cve,omitempty"`
 	} `json:"classification,omitempty"`
 }
 
-// Scan performs vulnerability scanning on web endpoints
-func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
-	urls, ok := target.([]string)
-	if !ok {
-		return nil, fmt.Errorf("invalid target type for Nuclei: %T", target)
+// ScanVulnerabilities implements VulnerabilityScanner.
+func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models.Project, targets []string, opts ScanOptions) ([]*models.Finding, error) {
+	if len(targets) == 0 {
+		return nil, nil
 	}
 
-	if len(urls) == 0 {
-		return []NucleiResult{}, nil
-	}
-
-	s.logger.Debug("Starting Nuclei scan for %d URLs", len(urls))
+	s.logger.Debug("Starting Nuclei scan for %d URLs", len(targets))
 
 	// Ensure we have the path to nuclei
 	nucleiPath := s.config.NucleiPath
@@ -97,7 +94,7 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	// Filter URLs to ensure they're in scope
 	var inScopeURLs []string
-	for _, url := range urls {
+	for _, url := range targets {
 		if project.Scope.IsInScope(models.AssetTypeURL, url) {
 			inScopeURLs = append(inScopeURLs, url)
 		}
@@ -105,23 +102,32 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	if len(inScopeURLs) == 0 {
 		s.logger.Debug("No in-scope URLs for Nuclei scan")
-		return []NucleiResult{}, nil
+		return nil, nil
 	}
 
 	// Write targets to the temporary file
 	targetsFile := filepath.Join(tempDir, "targets.txt")
 	outputFile := filepath.Join(tempDir, "nuclei_output.json")
 
-	if err := os.WriteFile(targetsFile, []byte(strings.Join(inScopeURLs, "\n")), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write targets to file: %v", err)
+	writeErr := os.WriteFile(targetsFile, []byte(strings.Join(inScopeURLs, "\n")), 0644)
+	if writeErr != nil {
+		return nil, fmt.Errorf("failed to write targets to file: %v", writeErr)
 	}
 
-	// Determine which templates to use based on options
-	templateFlags := []string{"-t", "technologies,exposures,misconfigurations,cves"}
-	if options != nil {
-		if templates, ok := options["templates"].(string); ok && templates != "" {
-			templateFlags = []string{"-t", templates}
+	// Determine which templates to use based on options (whitelist-validated)
+	templates := opts.Templates
+	if templates == "" {
+		if t, ok := opts.Extra["templates"].(string); ok && t != "" {
+			templates = t
 		}
+	}
+	templateFlags := []string{"-t", "technologies,exposures,misconfigurations,cves"}
+	if templates != "" {
+		validated, validateErr := validateNucleiTemplates(templates)
+		if validateErr != nil {
+			return nil, fmt.Errorf("invalid templates option: %w", validateErr)
+		}
+		templateFlags = []string{"-t", validated}
 	}
 
 	// Build command arguments
@@ -136,14 +142,48 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	}
 	args = append(args, templateFlags...)
 
-	// Set severity level (default to medium and above)
-	severityLevel := "medium,high,critical"
-	if options != nil {
-		if sev, ok := options["severity"].(string); ok && sev != "" {
+	// Set severity level (default to medium and above, whitelist-validated)
+	severityLevel := opts.Severity
+	if severityLevel == "" {
+		if sev, ok := opts.Extra["severity"].(string); ok && sev != "" {
 			severityLevel = sev
 		}
 	}
-	args = append(args, "-severity", severityLevel)
+	if severityLevel == "" {
+		severityLevel = "medium,high,critical"
+	}
+	validatedSev, sevErr := validateNucleiSeverity(severityLevel)
+	if sevErr != nil {
+		return nil, fmt.Errorf("invalid severity option: %w", sevErr)
+	}
+	args = append(args, "-severity", validatedSev)
+
+	// DAST/fuzzing mode flags
+	if opts.DAST {
+		args = append(args, "-dast")
+		s.logger.Debug("DAST fuzzing mode enabled")
+	}
+	if opts.InputMode != "" {
+		validatedIM, imErr := validateNucleiInputMode(opts.InputMode)
+		if imErr != nil {
+			return nil, fmt.Errorf("invalid input-mode option: %w", imErr)
+		}
+		args = append(args, "-input-mode", validatedIM)
+	}
+	if opts.FuzzingType != "" {
+		validatedFT, ftErr := validateNucleiFuzzingType(opts.FuzzingType)
+		if ftErr != nil {
+			return nil, fmt.Errorf("invalid fuzzing-type option: %w", ftErr)
+		}
+		args = append(args, "-fuzzing-type", validatedFT)
+	}
+	if opts.FuzzingMode != "" {
+		validatedFM, fmErr := validateNucleiFuzzingMode(opts.FuzzingMode)
+		if fmErr != nil {
+			return nil, fmt.Errorf("invalid fuzzing-mode option: %w", fmErr)
+		}
+		args = append(args, "-fuzzing-mode", validatedFM)
+	}
 
 	// Execute the command
 	s.logger.Debug("Running Nuclei with args: %v", args)
@@ -164,8 +204,7 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 	outputData, err := os.ReadFile(outputFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No findings
-			return []NucleiResult{}, nil
+			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to read nuclei output: %v", err)
 	}
@@ -189,5 +228,155 @@ func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, targe
 
 	s.logger.Debug("Nuclei found %d vulnerabilities across %d URLs", len(results), len(inScopeURLs))
 
-	return results, nil
+	// Convert NucleiResult to []*models.Finding
+	findings := make([]*models.Finding, 0, len(results))
+	for _, r := range results {
+		finding := nucleiResultToFinding(r, project.ID)
+		findings = append(findings, finding)
+	}
+
+	return findings, nil
+}
+
+// Scan implements the legacy Scanner interface.
+func (s *NucleiScanner) Scan(ctx context.Context, project *models.Project, target interface{}, options map[string]interface{}) (interface{}, error) {
+	urls, ok := target.([]string)
+	if !ok {
+		return nil, fmt.Errorf("invalid target type for Nuclei: %T", target)
+	}
+	return s.ScanVulnerabilities(ctx, project, urls, ScanOptions{Extra: options})
+}
+
+// nucleiResultToFinding converts a NucleiResult to a models.Finding.
+func nucleiResultToFinding(r NucleiResult, projectID string) *models.Finding {
+	finding := &models.Finding{
+		ProjectID:   projectID,
+		Type:        models.FindingType(r.Type),
+		Title:       r.Info.Name,
+		Description: r.Info.Description,
+		Severity:    models.FindingSeverity(r.Severity),
+		URL:         r.Host,
+		FoundBy:     "nuclei",
+		Status:      models.FindingStatusNew,
+	}
+
+	if r.MatchedAt != "" {
+		finding.URL = r.MatchedAt
+	}
+
+	// Map CVSS score to the dedicated float64 field
+	if r.Info.Classification.CVSSScore != "" {
+		if score, parseErr := strconv.ParseFloat(r.Info.Classification.CVSSScore, 64); parseErr == nil {
+			finding.CVSS = score
+		}
+	}
+
+	// Map CWE IDs (not CVE IDs)
+	if len(r.Info.Classification.CWEIDs) > 0 {
+		finding.CWE = strings.Join(r.Info.Classification.CWEIDs, ",")
+	}
+
+	// Append CVE IDs to references
+	if len(r.Info.Classification.CVEIDs) > 0 {
+		finding.References = append(finding.References, r.Info.Classification.CVEIDs...)
+	}
+
+	// Map remaining references
+	finding.References = append(finding.References, r.Info.Reference...)
+
+	return finding
+}
+
+// allowedNucleiTemplates is the set of valid nuclei template categories.
+var allowedNucleiTemplates = map[string]bool{
+	"technologies": true, "exposures": true, "misconfigurations": true,
+	"cves": true, "vulnerabilities": true, "default-logins": true,
+	"network": true, "dns": true, "file": true, "headless": true,
+	"helpers": true, "iot": true, "ssl": true, "takeovers": true,
+	"token-spray": true, "fuzzing": true, "dast": true,
+}
+
+// allowedNucleiSeverities is the set of valid nuclei severity levels.
+var allowedNucleiSeverities = map[string]bool{
+	"info": true, "low": true, "medium": true, "high": true, "critical": true,
+}
+
+// validateNucleiTemplates validates a comma-separated list of template categories.
+func validateNucleiTemplates(templates string) (string, error) {
+	var valid []string
+	for _, t := range strings.Split(templates, ",") {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if !allowedNucleiTemplates[t] {
+			return "", fmt.Errorf("unknown template category %q", t)
+		}
+		valid = append(valid, t)
+	}
+	if len(valid) == 0 {
+		return "", fmt.Errorf("no valid template categories specified")
+	}
+	return strings.Join(valid, ","), nil
+}
+
+// allowedNucleiInputModes is the set of valid nuclei input modes.
+var allowedNucleiInputModes = map[string]bool{
+	"openapi": true, "burp": true, "swagger": true, "jsonl": true,
+}
+
+// allowedNucleiFuzzingTypes is the set of valid nuclei fuzzing types.
+var allowedNucleiFuzzingTypes = map[string]bool{
+	"replace": true, "prefix": true, "postfix": true, "infix": true,
+}
+
+// allowedNucleiFuzzingModes is the set of valid nuclei fuzzing modes.
+var allowedNucleiFuzzingModes = map[string]bool{
+	"multiple": true, "single": true,
+}
+
+// validateNucleiInputMode validates an input mode value.
+func validateNucleiInputMode(mode string) (string, error) {
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if !allowedNucleiInputModes[mode] {
+		return "", fmt.Errorf("unknown input mode %q", mode)
+	}
+	return mode, nil
+}
+
+// validateNucleiFuzzingType validates a fuzzing type value.
+func validateNucleiFuzzingType(ft string) (string, error) {
+	ft = strings.TrimSpace(strings.ToLower(ft))
+	if !allowedNucleiFuzzingTypes[ft] {
+		return "", fmt.Errorf("unknown fuzzing type %q", ft)
+	}
+	return ft, nil
+}
+
+// validateNucleiFuzzingMode validates a fuzzing mode value.
+func validateNucleiFuzzingMode(fm string) (string, error) {
+	fm = strings.TrimSpace(strings.ToLower(fm))
+	if !allowedNucleiFuzzingModes[fm] {
+		return "", fmt.Errorf("unknown fuzzing mode %q", fm)
+	}
+	return fm, nil
+}
+
+// validateNucleiSeverity validates a comma-separated list of severity levels.
+func validateNucleiSeverity(severity string) (string, error) {
+	var valid []string
+	for _, s := range strings.Split(severity, ",") {
+		s = strings.TrimSpace(strings.ToLower(s))
+		if s == "" {
+			continue
+		}
+		if !allowedNucleiSeverities[s] {
+			return "", fmt.Errorf("unknown severity level %q", s)
+		}
+		valid = append(valid, s)
+	}
+	if len(valid) == 0 {
+		return "", fmt.Errorf("no valid severity levels specified")
+	}
+	return strings.Join(valid, ","), nil
 }
