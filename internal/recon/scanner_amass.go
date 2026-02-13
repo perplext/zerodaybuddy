@@ -39,7 +39,12 @@ func (s *AmassScanner) ScanSubdomains(ctx context.Context, project *models.Proje
 		"-timeout", "10",
 	}
 
-	cmd := exec.CommandContext(ctx, "amass", args...)
+	amassPath := s.config.AmassPath
+	if amassPath == "" {
+		amassPath = "amass"
+	}
+
+	cmd := exec.CommandContext(ctx, amassPath, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

@@ -13,7 +13,7 @@ import (
 type findingScanDest struct {
 	finding                                                                    models.Finding
 	findingType, confidence, url, details                                      sql.NullString
-	stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON string
+	stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON sql.NullString
 }
 
 // scanArgs returns pointers in column order for use with Scan/QueryRow.
@@ -49,33 +49,46 @@ func (d *findingScanDest) hydrate() (*models.Finding, error) {
 		f.Details = d.details.String
 	}
 
-	if err := utils.FromJSON(d.stepsJSON, &f.Steps); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal steps: %w", err)
+	stepsStr := d.stepsJSON.String
+	if stepsStr != "" {
+		if err := utils.FromJSON(stepsStr, &f.Steps); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal steps: %w", err)
+		}
 	}
 
-	if d.evidenceMapJSON != "" && d.evidenceMapJSON != "null" && d.evidenceMapJSON != "[]" {
-		if err := utils.FromJSON(d.evidenceMapJSON, &f.Evidence); err != nil {
+	evidenceMapStr := d.evidenceMapJSON.String
+	evidenceStr := d.evidenceJSON.String
+	if evidenceMapStr != "" && evidenceMapStr != "null" && evidenceMapStr != "[]" {
+		if err := utils.FromJSON(evidenceMapStr, &f.Evidence); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal evidence map: %w", err)
 		}
-	} else if d.evidenceJSON != "" && d.evidenceJSON != "null" && d.evidenceJSON != "[]" {
+	} else if evidenceStr != "" && evidenceStr != "null" && evidenceStr != "[]" {
 		var evidenceArray []models.Evidence
-		if err := utils.FromJSON(d.evidenceJSON, &evidenceArray); err != nil {
+		if err := utils.FromJSON(evidenceStr, &evidenceArray); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal evidence array: %w", err)
 		}
 		f.Evidence = evidenceArray
 	}
 
-	if d.metadataJSON != "" && d.metadataJSON != "null" {
-		if err := utils.FromJSON(d.metadataJSON, &f.Metadata); err != nil {
+	metadataStr := d.metadataJSON.String
+	if metadataStr != "" && metadataStr != "null" {
+		if err := utils.FromJSON(metadataStr, &f.Metadata); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 		}
 	}
 
-	if err := utils.FromJSON(d.referencesJSON, &f.References); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal references: %w", err)
+	referencesStr := d.referencesJSON.String
+	if referencesStr != "" {
+		if err := utils.FromJSON(referencesStr, &f.References); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal references: %w", err)
+		}
 	}
-	if err := utils.FromJSON(d.affectedAssetsJSON, &f.AffectedAssets); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal affected assets: %w", err)
+
+	affectedAssetsStr := d.affectedAssetsJSON.String
+	if affectedAssetsStr != "" {
+		if err := utils.FromJSON(affectedAssetsStr, &f.AffectedAssets); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal affected assets: %w", err)
+		}
 	}
 
 	return f, nil

@@ -21,11 +21,15 @@ var internalCIDRs []*net.IPNet
 
 func init() {
 	for _, cidr := range []string{
+		"0.0.0.0/8",       // "this" network
 		"127.0.0.0/8",     // loopback
 		"10.0.0.0/8",      // RFC 1918
 		"172.16.0.0/12",   // RFC 1918
 		"192.168.0.0/16",  // RFC 1918
 		"169.254.0.0/16",  // link-local / cloud metadata
+		"100.64.0.0/10",   // RFC 6598 shared address space
+		"192.0.0.0/24",    // IETF protocol assignments
+		"198.18.0.0/15",   // benchmarking
 		"::1/128",         // IPv6 loopback
 		"fc00::/7",        // IPv6 ULA
 		"fe80::/10",       // IPv6 link-local
@@ -35,8 +39,27 @@ func init() {
 	}
 }
 
+// isInternalIP returns true if the given IP falls within a blocked CIDR range.
+func isInternalIP(ip net.IP) bool {
+	for _, cidr := range internalCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // isInternalHost returns true if the hostname resolves to a private/internal IP.
+// Note: When passing URLs to external tools (e.g. nuclei), there is an inherent
+// TOCTOU window where DNS could resolve differently between this check and the
+// tool's connection. This is a best-effort pre-filter; network-level controls
+// (e.g. firewall rules blocking RFC 1918 egress) are recommended for defense in depth.
 func isInternalHost(hostname string) bool {
+	// If the hostname is already an IP address, check it directly
+	if ip := net.ParseIP(hostname); ip != nil {
+		return isInternalIP(ip)
+	}
+
 	ips, err := net.LookupHost(hostname)
 	if err != nil {
 		return true // fail closed — if we can't resolve, block it
@@ -46,10 +69,8 @@ func isInternalHost(hostname string) bool {
 		if ip == nil {
 			continue
 		}
-		for _, cidr := range internalCIDRs {
-			if cidr.Contains(ip) {
-				return true
-			}
+		if isInternalIP(ip) {
+			return true
 		}
 	}
 	return false

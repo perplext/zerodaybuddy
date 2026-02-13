@@ -199,7 +199,7 @@ func (s *WaybackScanner) DiscoverEndpoints(ctx context.Context, project *models.
 	// Convert WaybackResults to []*models.Endpoint for downstream consumption
 	endpoints := make([]*models.Endpoint, 0, len(filteredResults))
 	for _, r := range filteredResults {
-		endpoint := waybackResultToEndpoint(r)
+		endpoint := waybackResultToEndpoint(r, project.ID)
 		endpoints = append(endpoints, endpoint)
 	}
 
@@ -216,11 +216,12 @@ func (s *WaybackScanner) Scan(ctx context.Context, project *models.Project, targ
 }
 
 // waybackResultToEndpoint converts a WaybackResult to a models.Endpoint
-func waybackResultToEndpoint(r WaybackResult) *models.Endpoint {
+func waybackResultToEndpoint(r WaybackResult, projectID string) *models.Endpoint {
 	endpoint := &models.Endpoint{
-		URL:     r.URL,
-		Status:  r.StatusCode,
-		FoundBy: "waybackurls",
+		ProjectID: projectID,
+		URL:       r.URL,
+		Status:    r.StatusCode,
+		FoundBy:   "waybackurls",
 	}
 
 	// Extract content type from mime type

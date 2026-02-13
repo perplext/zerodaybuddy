@@ -11,6 +11,7 @@ import (
 
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	"github.com/perplext/zerodaybuddy/pkg/models"
+	"github.com/perplext/zerodaybuddy/pkg/ratelimit"
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 )
 
@@ -18,9 +19,9 @@ const immunefiDefaultAPIURL = "https://immunefi.com/api"
 
 // Immunefi implements the Platform interface for the Immunefi web3 bug bounty platform.
 type Immunefi struct {
-	config *config.ImmunefiConfig
-	client *http.Client
-	logger *utils.Logger
+	config     *config.ImmunefiConfig
+	httpClient *ratelimit.HTTPClient
+	logger     *utils.Logger
 }
 
 // NewImmunefi creates a new Immunefi platform instance.
@@ -28,10 +29,29 @@ func NewImmunefi(cfg config.ImmunefiConfig, logger *utils.Logger) Platform {
 	if cfg.APIUrl == "" {
 		cfg.APIUrl = immunefiDefaultAPIURL
 	}
+
+	// Create rate limiter with default config
+	rlConfig := ratelimit.DefaultConfig()
+	rateLimiter := ratelimit.New(rlConfig)
+
+	httpClient := ratelimit.NewHTTPClient(rateLimiter, ratelimit.HTTPClientConfig{
+		Service: "immunefi",
+		Timeout: 30 * time.Second,
+		RetryConfig: ratelimit.RetryConfig{
+			MaxAttempts:     3,
+			InitialDelay:    1 * time.Second,
+			MaxDelay:        30 * time.Second,
+			Multiplier:      2.0,
+			JitterFactor:    0.1,
+			RetryableErrors: ratelimit.DefaultRetryableErrors(),
+		},
+		Logger: logger,
+	})
+
 	return &Immunefi{
-		config: &cfg,
-		client: &http.Client{Timeout: 30 * time.Second},
-		logger: logger,
+		config:     &cfg,
+		httpClient: httpClient,
+		logger:     logger,
 	}
 }
 
@@ -70,13 +90,7 @@ func (i *Immunefi) ListPrograms(ctx context.Context) ([]models.Program, error) {
 
 	endpoint := fmt.Sprintf("%s/bounties", i.config.APIUrl)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := i.client.Do(req)
+	resp, err := i.httpClient.Get(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Immunefi programs: %w", err)
 	}
@@ -138,13 +152,7 @@ func (i *Immunefi) FetchScope(ctx context.Context, handle string) (*models.Scope
 
 	endpoint := fmt.Sprintf("%s/bounty/%s", i.config.APIUrl, handle)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := i.client.Do(req)
+	resp, err := i.httpClient.Get(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Immunefi scope: %w", err)
 	}

@@ -25,7 +25,7 @@ import (
 // App represents the main application
 type App struct {
 	config      *config.Config
-	store       *storage.SQLiteStore
+	store       storage.Store
 	platforms   map[string]platform.Platform
 	authSvc     *auth.Service
 	reconSvc    *recon.Service
@@ -88,7 +88,7 @@ func (a *App) Initialize(ctx context.Context) error {
 	a.platforms["bugcrowd"] = platform.NewBugcrowdWithRateLimiter(a.config.Bugcrowd, a.logger, a.rateLimiter)
 	
 	// Initialize services
-	// Create auth store from main store
+	// Create auth store directly from the SQLite store's DB connection
 	authStore := auth.NewSQLStore(store.DB())
 	
 	// Auto-generate JWT secret if not configured

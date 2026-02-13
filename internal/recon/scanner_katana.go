@@ -150,7 +150,7 @@ func (s *KatanaScanner) DiscoverEndpoints(ctx context.Context, project *models.P
 	// Convert KatanaResults to []*models.Endpoint for downstream consumption
 	endpoints := make([]*models.Endpoint, 0, len(allResults))
 	for _, r := range allResults {
-		endpoint := katanaResultToEndpoint(r)
+		endpoint := katanaResultToEndpoint(r, project.ID)
 		endpoints = append(endpoints, endpoint)
 	}
 
@@ -167,12 +167,13 @@ func (s *KatanaScanner) Scan(ctx context.Context, project *models.Project, targe
 }
 
 // katanaResultToEndpoint converts a KatanaResult to a models.Endpoint
-func katanaResultToEndpoint(r KatanaResult) *models.Endpoint {
+func katanaResultToEndpoint(r KatanaResult, projectID string) *models.Endpoint {
 	endpoint := &models.Endpoint{
-		URL:     r.URL,
-		Method:  r.Method,
-		Status:  r.Status,
-		FoundBy: "katana",
+		ProjectID: projectID,
+		URL:       r.URL,
+		Method:    r.Method,
+		Status:    r.Status,
+		FoundBy:   "katana",
 	}
 
 	if endpoint.Method == "" {
