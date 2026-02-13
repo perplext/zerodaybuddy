@@ -59,7 +59,7 @@ func (s *AmassScanner) ScanSubdomains(ctx context.Context, project *models.Proje
 		if subdomain != "" && strings.Contains(subdomain, domain) {
 			parts := strings.Fields(subdomain)
 			for _, part := range parts {
-				if strings.HasSuffix(part, domain) {
+				if part == domain || strings.HasSuffix(part, "."+domain) {
 					subdomains = append(subdomains, part)
 					break
 				}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -150,7 +151,7 @@ func (i *Immunefi) GetProgram(ctx context.Context, handle string) (*models.Progr
 func (i *Immunefi) FetchScope(ctx context.Context, handle string) (*models.Scope, error) {
 	i.logger.Debug("Fetching scope for Immunefi program: %s", handle)
 
-	endpoint := fmt.Sprintf("%s/bounty/%s", i.config.APIUrl, handle)
+	endpoint := fmt.Sprintf("%s/bounty/%s", i.config.APIUrl, url.PathEscape(handle))
 
 	resp, err := i.httpClient.Get(ctx, endpoint)
 	if err != nil {

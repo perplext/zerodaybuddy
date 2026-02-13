@@ -34,7 +34,10 @@ func init() {
 		"fc00::/7",        // IPv6 ULA
 		"fe80::/10",       // IPv6 link-local
 	} {
-		_, network, _ := net.ParseCIDR(cidr)
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Sprintf("invalid internal CIDR %q: %v", cidr, err))
+		}
 		internalCIDRs = append(internalCIDRs, network)
 	}
 }

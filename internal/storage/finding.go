@@ -12,7 +12,7 @@ import (
 // findingScanDest holds the intermediate scan targets for a finding row.
 type findingScanDest struct {
 	finding                                                                    models.Finding
-	findingType, confidence, url, details                                      sql.NullString
+	findingType, confidence, url, details, cwe                                 sql.NullString
 	stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON sql.NullString
 }
 
@@ -21,7 +21,7 @@ func (d *findingScanDest) scanArgs() []interface{} {
 	return []interface{}{
 		&d.finding.ID, &d.finding.ProjectID, &d.findingType, &d.finding.Title, &d.finding.Description,
 		&d.details, &d.finding.Severity, &d.confidence, &d.finding.Status, &d.url,
-		&d.finding.CVSS, &d.finding.CVSSVector, &d.finding.CVSSVersion, &d.finding.CWE,
+		&d.finding.CVSS, &d.finding.CVSSVector, &d.finding.CVSSVersion, &d.cwe,
 		&d.stepsJSON, &d.evidenceJSON, &d.evidenceMapJSON, &d.metadataJSON,
 		&d.finding.Impact, &d.finding.Remediation, &d.referencesJSON, &d.finding.FoundBy, &d.finding.FoundAt,
 		&d.affectedAssetsJSON, &d.finding.CreatedAt, &d.finding.UpdatedAt,
@@ -47,6 +47,9 @@ func (d *findingScanDest) hydrate() (*models.Finding, error) {
 	}
 	if d.details.Valid {
 		f.Details = d.details.String
+	}
+	if d.cwe.Valid {
+		f.CWE = d.cwe.String
 	}
 
 	stepsStr := d.stepsJSON.String

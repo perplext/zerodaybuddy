@@ -2,6 +2,7 @@ package recon
 
 import (
 	"context"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -99,10 +100,12 @@ func (s *TrivyScanner) ScanVulnerabilities(ctx context.Context, project *models.
 
 		s.logger.Debug("Running Trivy: %s %v", trivyPath, args)
 		cmd := exec.CommandContext(ctx, trivyPath, args...)
+		var stderrBuf bytes.Buffer
+		cmd.Stderr = &stderrBuf
 		output, err := cmd.Output()
 		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				s.logger.Warn("Trivy returned non-zero exit: %s", exitErr.Stderr)
+			if _, ok := err.(*exec.ExitError); ok {
+				s.logger.Warn("Trivy returned non-zero exit: %s", stderrBuf.String())
 			} else {
 				return nil, fmt.Errorf("trivy failed for %s: %w", target, err)
 			}
