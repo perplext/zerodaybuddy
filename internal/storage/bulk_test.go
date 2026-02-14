@@ -59,8 +59,11 @@ func TestBulkCreateHosts_Success(t *testing.T) {
 		},
 	}
 
-	err = sqliteStore.BulkCreateHosts(ctx, hosts)
+	result, err := sqliteStore.BulkCreateHosts(ctx, hosts)
 	require.NoError(t, err)
+	assert.Equal(t, 3, result.Attempted)
+	assert.Equal(t, 3, result.Inserted)
+	assert.Equal(t, 0, result.Skipped)
 
 	// Verify all were created with IDs
 	for _, h := range hosts {
@@ -79,8 +82,10 @@ func TestBulkCreateHosts_Empty(t *testing.T) {
 	defer cleanup()
 
 	sqliteStore := store.(*SQLiteStore)
-	err := sqliteStore.BulkCreateHosts(context.Background(), []*models.Host{})
+	result, err := sqliteStore.BulkCreateHosts(context.Background(), []*models.Host{})
 	assert.NoError(t, err, "empty slice should be a no-op")
+	assert.Equal(t, 0, result.Attempted)
+	assert.Equal(t, 0, result.Inserted)
 }
 
 func TestBulkCreateHosts_PreserveExistingID(t *testing.T) {
@@ -108,7 +113,7 @@ func TestBulkCreateHosts_PreserveExistingID(t *testing.T) {
 		},
 	}
 
-	err = sqliteStore.BulkCreateHosts(ctx, hosts)
+	_, err = sqliteStore.BulkCreateHosts(ctx, hosts)
 	require.NoError(t, err)
 	assert.Equal(t, customID, hosts[0].ID, "pre-set ID should be preserved")
 
@@ -116,6 +121,63 @@ func TestBulkCreateHosts_PreserveExistingID(t *testing.T) {
 	retrieved, err := store.GetHost(ctx, customID)
 	require.NoError(t, err)
 	assert.Equal(t, "custom.example.com", retrieved.Value)
+}
+
+func TestBulkCreateHosts_SkipsDuplicates(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project := &models.Project{
+		Name: "Dup Test", Handle: "dup-test", Platform: "hackerone",
+		Status: models.ProjectStatusActive, Scope: models.Scope{},
+	}
+	err := store.CreateProject(ctx, project)
+	require.NoError(t, err)
+
+	sqliteStore := store.(*SQLiteStore)
+
+	// Insert initial host
+	hosts := []*models.Host{
+		{
+			ProjectID: project.ID,
+			Type:      models.AssetTypeDomain,
+			Value:     "dup.example.com",
+			Status:    "active",
+			FoundBy:   "subfinder",
+		},
+	}
+	result, err := sqliteStore.BulkCreateHosts(ctx, hosts)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Inserted)
+
+	// Insert batch with a duplicate and a new host
+	batch2 := []*models.Host{
+		{
+			ProjectID: project.ID,
+			Type:      models.AssetTypeDomain,
+			Value:     "dup.example.com", // duplicate
+			Status:    "active",
+			FoundBy:   "amass",
+		},
+		{
+			ProjectID: project.ID,
+			Type:      models.AssetTypeDomain,
+			Value:     "new.example.com", // new
+			Status:    "active",
+			FoundBy:   "amass",
+		},
+	}
+	result, err = sqliteStore.BulkCreateHosts(ctx, batch2)
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Attempted)
+	assert.Equal(t, 1, result.Inserted)
+	assert.Equal(t, 1, result.Skipped)
+
+	// Verify total is 2, not 3
+	listed, err := store.ListHosts(ctx, project.ID)
+	require.NoError(t, err)
+	assert.Len(t, listed, 2)
 }
 
 func TestBulkCreateEndpoints_Success(t *testing.T) {
@@ -163,8 +225,10 @@ func TestBulkCreateEndpoints_Success(t *testing.T) {
 		},
 	}
 
-	err = sqliteStore.BulkCreateEndpoints(ctx, endpoints)
+	result, err := sqliteStore.BulkCreateEndpoints(ctx, endpoints)
 	require.NoError(t, err)
+	assert.Equal(t, 2, result.Inserted)
+	assert.Equal(t, 0, result.Skipped)
 
 	for _, ep := range endpoints {
 		assert.NotEmpty(t, ep.ID)
@@ -180,8 +244,49 @@ func TestBulkCreateEndpoints_Empty(t *testing.T) {
 	defer cleanup()
 
 	sqliteStore := store.(*SQLiteStore)
-	err := sqliteStore.BulkCreateEndpoints(context.Background(), []*models.Endpoint{})
+	result, err := sqliteStore.BulkCreateEndpoints(context.Background(), []*models.Endpoint{})
 	assert.NoError(t, err)
+	assert.Equal(t, 0, result.Attempted)
+}
+
+func TestBulkCreateEndpoints_SkipsDuplicates(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project := &models.Project{
+		Name: "EP Dup Test", Handle: "ep-dup", Platform: "hackerone",
+		Status: models.ProjectStatusActive, Scope: models.Scope{},
+	}
+	err := store.CreateProject(ctx, project)
+	require.NoError(t, err)
+
+	host := &models.Host{
+		ProjectID: project.ID, Type: models.AssetTypeDomain,
+		Value: "api.example.com", Status: "active", FoundBy: "subfinder",
+	}
+	err = store.CreateHost(ctx, host)
+	require.NoError(t, err)
+
+	sqliteStore := store.(*SQLiteStore)
+
+	// Insert initial endpoint
+	eps := []*models.Endpoint{
+		{ProjectID: project.ID, HostID: host.ID, URL: "https://api.example.com/users", Method: "GET", FoundBy: "katana"},
+	}
+	_, err = sqliteStore.BulkCreateEndpoints(ctx, eps)
+	require.NoError(t, err)
+
+	// Insert batch with duplicate (same host_id + url + method) and new endpoint
+	batch2 := []*models.Endpoint{
+		{ProjectID: project.ID, HostID: host.ID, URL: "https://api.example.com/users", Method: "GET", FoundBy: "katana"}, // dup
+		{ProjectID: project.ID, HostID: host.ID, URL: "https://api.example.com/users", Method: "POST", FoundBy: "ffuf"},  // new (different method)
+	}
+	result, err := sqliteStore.BulkCreateEndpoints(ctx, batch2)
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Attempted)
+	assert.Equal(t, 1, result.Inserted)
+	assert.Equal(t, 1, result.Skipped)
 }
 
 func TestBulkCreateFindings_Success(t *testing.T) {
@@ -231,8 +336,10 @@ func TestBulkCreateFindings_Success(t *testing.T) {
 		},
 	}
 
-	err = sqliteStore.BulkCreateFindings(ctx, findings)
+	result, err := sqliteStore.BulkCreateFindings(ctx, findings)
 	require.NoError(t, err)
+	assert.Equal(t, 3, result.Inserted)
+	assert.Equal(t, 0, result.Skipped)
 
 	for _, f := range findings {
 		assert.NotEmpty(t, f.ID)
@@ -251,8 +358,9 @@ func TestBulkCreateFindings_Empty(t *testing.T) {
 	defer cleanup()
 
 	sqliteStore := store.(*SQLiteStore)
-	err := sqliteStore.BulkCreateFindings(context.Background(), []*models.Finding{})
+	result, err := sqliteStore.BulkCreateFindings(context.Background(), []*models.Finding{})
 	assert.NoError(t, err)
+	assert.Equal(t, 0, result.Attempted)
 }
 
 func TestBulkCreateFindings_DefaultValues(t *testing.T) {
@@ -279,7 +387,7 @@ func TestBulkCreateFindings_DefaultValues(t *testing.T) {
 		},
 	}
 
-	err = sqliteStore.BulkCreateFindings(ctx, findings)
+	_, err = sqliteStore.BulkCreateFindings(ctx, findings)
 	require.NoError(t, err)
 
 	f := findings[0]

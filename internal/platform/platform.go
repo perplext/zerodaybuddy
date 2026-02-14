@@ -6,6 +6,9 @@ import (
 	"github.com/perplext/zerodaybuddy/pkg/models"
 )
 
+// maxPages is a safety limit to prevent infinite pagination loops.
+const maxPages = 100
+
 // Platform defines the interface for bug bounty platforms
 type Platform interface {
 	// ListPrograms lists all available bug bounty programs

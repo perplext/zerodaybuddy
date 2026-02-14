@@ -68,10 +68,11 @@ type Store interface {
 	ListReports(ctx context.Context, projectID string) ([]*models.Report, error)
 	DeleteReport(ctx context.Context, id string) error
 	
-	// Bulk methods
-	BulkCreateHosts(ctx context.Context, hosts []*models.Host) error
-	BulkCreateEndpoints(ctx context.Context, endpoints []*models.Endpoint) error
-	BulkCreateFindings(ctx context.Context, findings []*models.Finding) error
+	// Bulk methods — duplicates are silently skipped via INSERT OR IGNORE.
+	// The returned BulkResult reports how many records were inserted vs skipped.
+	BulkCreateHosts(ctx context.Context, hosts []*models.Host) (*BulkResult, error)
+	BulkCreateEndpoints(ctx context.Context, endpoints []*models.Endpoint) (*BulkResult, error)
+	BulkCreateFindings(ctx context.Context, findings []*models.Finding) (*BulkResult, error)
 
 	// Close closes the database connection
 	Close() error

@@ -213,6 +213,64 @@ func TestHackerOne_ListPrograms(t *testing.T) {
 	}
 }
 
+func TestHackerOne_ListPrograms_Pagination(t *testing.T) {
+	requestCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+
+		switch requestCount {
+		case 1:
+			// Page 1: return 2 programs with a next link
+			response := map[string]interface{}{
+				"data": []map[string]interface{}{
+					{"id": "1", "type": "program", "attributes": map[string]interface{}{
+						"handle": "prog-1", "name": "Program 1", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z",
+					}},
+					{"id": "2", "type": "program", "attributes": map[string]interface{}{
+						"handle": "prog-2", "name": "Program 2", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z",
+					}},
+				},
+				"links": map[string]interface{}{
+					"next": fmt.Sprintf("%s/programs?page=2", r.Host),
+				},
+			}
+			// Fix: next URL must be the full server URL
+			response["links"] = map[string]interface{}{
+				"next": fmt.Sprintf("http://%s/programs?page=2", r.Host),
+			}
+			json.NewEncoder(w).Encode(response)
+		case 2:
+			// Page 2: return 1 program, no next link
+			response := map[string]interface{}{
+				"data": []map[string]interface{}{
+					{"id": "3", "type": "program", "attributes": map[string]interface{}{
+						"handle": "prog-3", "name": "Program 3", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z",
+					}},
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+		default:
+			t.Error("unexpected extra page request")
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	cfg := config.HackerOneConfig{APIUrl: server.URL, Username: "testuser", APIKey: "testkey"}
+	logger := utils.NewLogger("", false)
+	h1 := NewHackerOne(cfg, logger)
+
+	programs, err := h1.ListPrograms(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, programs, 3)
+	assert.Equal(t, "Program 1", programs[0].Name)
+	assert.Equal(t, "Program 2", programs[1].Name)
+	assert.Equal(t, "Program 3", programs[2].Name)
+	assert.Equal(t, 2, requestCount)
+}
+
 func TestHackerOne_GetProgram(t *testing.T) {
 	tests := []struct {
 		name               string
