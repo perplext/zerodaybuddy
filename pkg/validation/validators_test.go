@@ -265,3 +265,55 @@ func TestTruncateString(t *testing.T) {
 		})
 	}
 }
+
+func TestTargetType(t *testing.T) {
+	tests := []struct {
+		name       string
+		targetType string
+		wantErr    bool
+	}{
+		{"valid all", "all", false},
+		{"valid host", "host", false},
+		{"valid endpoint", "endpoint", false},
+		{"valid url", "url", false},
+		{"valid uppercase", "HOST", false},
+		{"valid with spaces", " endpoint ", false},
+		{"invalid type", "network", true},
+		{"empty", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := TargetType(tt.targetType)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TargetType() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestIPAddress(t *testing.T) {
+	tests := []struct {
+		name    string
+		ip      string
+		wantErr bool
+	}{
+		{"valid IPv4", "192.168.1.1", false},
+		{"valid IPv4 localhost", "127.0.0.1", false},
+		{"valid IPv6 loopback", "::1", false},
+		{"valid IPv6 full", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", false},
+		{"invalid format", "not-an-ip", true},
+		{"invalid too many octets", "1.2.3.4.5", true},
+		{"invalid empty", "", true},
+		{"hostname", "example.com", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := IPAddress(tt.ip)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("IPAddress() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
