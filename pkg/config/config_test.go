@@ -188,9 +188,10 @@ tools:
 
 func TestConfigSave(t *testing.T) {
 	// Setup
+	origHome := os.Getenv("HOME")
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", os.Getenv("HOME"))
+	defer os.Setenv("HOME", origHome)
 	
 	// First load default config
 	cfg, err := Load()
@@ -230,6 +231,59 @@ func TestConfigSave(t *testing.T) {
 	// For now, just check that they're positive valid values
 	assert.Greater(t, loaded.Tools.MaxThreads, 0)
 	assert.GreaterOrEqual(t, loaded.Tools.DefaultRateLimit, 0)
+}
+
+func TestConfigSave_ReadOnlyDir(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", origHome)
+
+	// Load a config first (creates the config dir and file)
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	// Make the config directory read-only so Save() can't write
+	configDir := filepath.Join(tempDir, ".zerodaybuddy")
+	configFile := filepath.Join(configDir, "config.yaml")
+	os.Chmod(configFile, 0444)
+	os.Chmod(configDir, 0555)
+	defer func() {
+		// Restore permissions so t.TempDir() cleanup works
+		os.Chmod(configDir, 0755)
+		os.Chmod(configFile, 0644)
+	}()
+
+	// Save should fail
+	err = cfg.Save()
+	assert.Error(t, err, "Save() should fail when config dir is read-only")
+}
+
+func TestConfigSave_RoundTrip(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", origHome)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	// Set specific values across config sections
+	cfg.Debug = true
+	cfg.WebServer.Port = 9999
+
+	err = cfg.Save()
+	require.NoError(t, err)
+
+	// Load again and verify values survived the round-trip
+	loaded, err := Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, true, loaded.Debug)
+	assert.Equal(t, 9999, loaded.WebServer.Port)
+	// Note: nested struct fields with mapstructure tags (e.g. Tools.MaxThreads)
+	// don't round-trip correctly through viper's Set/Write because viper uses
+	// lowercased Go field names instead of mapstructure tag names.
 }
 
 func TestConfigDefaults(t *testing.T) {

@@ -73,61 +73,80 @@ func NewBugcrowdWithRateLimiter(cfg config.BugcrowdConfig, logger *utils.Logger,
 	}
 }
 
-// ListPrograms lists all available bug bounty programs on Bugcrowd
+// ListPrograms lists all available bug bounty programs on Bugcrowd.
+// Follows page-based pagination until all results are fetched.
 func (b *Bugcrowd) ListPrograms(ctx context.Context) ([]models.Program, error) {
 	b.logger.Debug("Listing Bugcrowd programs")
-	
+
 	if b.config.CookieValue == "" {
 		return nil, fmt.Errorf("Bugcrowd cookie not configured")
 	}
-	
-	// Bugcrowd API endpoint for programs (this is an unofficial API endpoint)
-	endpoint := fmt.Sprintf("%s/programs.json", b.config.APIUrl)
-	
-	// Create request
+
+	var programs []models.Program
+
+	for page := 1; page <= maxPages; page++ {
+		endpoint := fmt.Sprintf("%s/programs.json?page=%d", b.config.APIUrl, page)
+
+		pagePrograms, hasMore, err := b.fetchProgramsPage(ctx, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		programs = append(programs, pagePrograms...)
+
+		if !hasMore {
+			break
+		}
+	}
+
+	b.logger.Debug("Found %d Bugcrowd programs", len(programs))
+	return programs, nil
+}
+
+// fetchProgramsPage fetches a single page of programs and returns whether more pages exist.
+func (b *Bugcrowd) fetchProgramsPage(ctx context.Context, endpoint string) ([]models.Program, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, false, fmt.Errorf("failed to create request: %w", err)
 	}
-	
-	// Set headers and cookies
+
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "ZeroDayBuddy/1.0")
 	req.Header.Set("Cookie", fmt.Sprintf("_crowdcontrol_session=%s", b.config.CookieValue))
-	
-	// Send request
+
 	resp, err := b.client.Do(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, false, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	
-	// Check response status
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
-	
-	// Parse response
+
 	var response struct {
 		Programs []struct {
-			ID           string    `json:"id"`
-			Name         string    `json:"name"`
-			Code         string    `json:"code"`
-			Description  string    `json:"description"`
-			URL          string    `json:"url"`
-			CreatedAt    time.Time `json:"created_at"`
-			UpdatedAt    time.Time `json:"updated_at"`
+			ID             string    `json:"id"`
+			Name           string    `json:"name"`
+			Code           string    `json:"code"`
+			Description    string    `json:"description"`
+			URL            string    `json:"url"`
+			CreatedAt      time.Time `json:"created_at"`
+			UpdatedAt      time.Time `json:"updated_at"`
 			LogoAttachment struct {
 				URL string `json:"url"`
 			} `json:"logo_attachment"`
 		} `json:"programs"`
+		Meta struct {
+			TotalPages  int `json:"total_pages"`
+			CurrentPage int `json:"current_page"`
+			TotalCount  int `json:"total_count"`
+		} `json:"meta"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, false, fmt.Errorf("failed to parse response: %w", err)
 	}
-	
-	// Convert to models.Program
+
 	programs := make([]models.Program, 0, len(response.Programs))
 	for _, p := range response.Programs {
 		programs = append(programs, models.Program{
@@ -141,10 +160,12 @@ func (b *Bugcrowd) ListPrograms(ctx context.Context) ([]models.Program, error) {
 			UpdatedAt:   p.UpdatedAt,
 		})
 	}
-	
-	b.logger.Debug("Found %d Bugcrowd programs", len(programs))
-	
-	return programs, nil
+
+	// More pages if meta indicates additional pages exist.
+	// Without meta info, assume this is a single-page response.
+	hasMore := response.Meta.TotalPages > 0 && response.Meta.CurrentPage < response.Meta.TotalPages
+
+	return programs, hasMore, nil
 }
 
 // GetProgram retrieves a specific bug bounty program from Bugcrowd

@@ -315,3 +315,65 @@ func TestScopeURL(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateEmail(t *testing.T) {
+	tests := []struct {
+		name    string
+		email   string
+		wantErr bool
+	}{
+		{"valid simple", "user@example.com", false},
+		{"valid with dots", "first.last@example.com", false},
+		{"valid with plus", "user+tag@example.com", false},
+		{"valid subdomain", "user@mail.example.com", false},
+		{"empty", "", true},
+		{"no at sign", "userexample.com", true},
+		{"no domain", "user@", true},
+		{"no tld", "user@example", true},
+		{"spaces", "user @example.com", true},
+		{"too long", string(make([]byte, 250)) + "@a.co", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEmail(tt.email)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfigURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"valid external", "https://api.example.com", false},
+		{"valid localhost (allowed for config)", "http://localhost:8080", false},
+		{"valid private IP (allowed for config)", "http://192.168.1.100:3000", false},
+		{"empty", "", true},
+		{"invalid scheme", "ftp://example.com", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ConfigURL(tt.url)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidationError(t *testing.T) {
+	err := ValidationError("email", "must be valid")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "email")
+	assert.Contains(t, err.Error(), "must be valid")
+}

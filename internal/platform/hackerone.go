@@ -75,46 +75,56 @@ func NewHackerOneWithRateLimiter(cfg config.HackerOneConfig, logger *utils.Logge
 	}
 }
 
-// ListPrograms lists all available bug bounty programs on HackerOne
+// ListPrograms lists all available bug bounty programs on HackerOne.
+// Follows JSON:API pagination links to fetch all pages of results.
 func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) {
 	h.logger.Debug("Listing HackerOne programs")
-	
+
 	if h.config.APIKey == "" {
 		return nil, fmt.Errorf("HackerOne API credentials not configured")
 	}
-	
-	// HackerOne API endpoint for programs
-	endpoint := fmt.Sprintf("%s/programs", h.config.APIUrl)
-	
-	// Create request
+
+	var programs []models.Program
+	nextURL := fmt.Sprintf("%s/programs", h.config.APIUrl)
+
+	for page := 0; nextURL != "" && page < maxPages; page++ {
+		pagePrograms, next, err := h.fetchProgramsPage(ctx, nextURL)
+		if err != nil {
+			return nil, err
+		}
+		programs = append(programs, pagePrograms...)
+		nextURL = next
+	}
+
+	h.logger.Debug("Found %d HackerOne programs", len(programs))
+	return programs, nil
+}
+
+// fetchProgramsPage fetches a single page of programs and returns the next page URL (if any).
+func (h *HackerOne) fetchProgramsPage(ctx context.Context, endpoint string) ([]models.Program, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, "", fmt.Errorf("failed to create request: %w", err)
 	}
-	
-	// Set headers
+
 	req.Header.Set("Accept", "application/json")
-	// For hacker API tokens, the token is used as both username and password
-	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", 
+	req.Header.Set("Authorization", fmt.Sprintf("Basic %s",
 		base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", h.config.APIKey, h.config.APIKey)))))
-	
-	// Send request
+
 	resp, err := h.client.Do(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	
-	// Check response status
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+			return nil, "", fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
 		}
-		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		return nil, "", fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
-	
-	// Parse response
+
 	var response struct {
 		Data []struct {
 			ID         string `json:"id"`
@@ -128,18 +138,20 @@ func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) 
 				UpdatedAt   string `json:"updated_at"`
 			} `json:"attributes"`
 		} `json:"data"`
+		Links struct {
+			Next string `json:"next"`
+		} `json:"links"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, "", fmt.Errorf("failed to parse response: %w", err)
 	}
-	
-	// Convert to models.Program
+
 	programs := make([]models.Program, 0, len(response.Data))
 	for _, p := range response.Data {
 		createdAt, _ := time.Parse(time.RFC3339, p.Attributes.CreatedAt)
 		updatedAt, _ := time.Parse(time.RFC3339, p.Attributes.UpdatedAt)
-		
+
 		programs = append(programs, models.Program{
 			ID:          p.ID,
 			Name:        p.Attributes.Name,
@@ -151,10 +163,8 @@ func (h *HackerOne) ListPrograms(ctx context.Context) ([]models.Program, error) 
 			UpdatedAt:   updatedAt,
 		})
 	}
-	
-	h.logger.Debug("Found %d HackerOne programs", len(programs))
-	
-	return programs, nil
+
+	return programs, response.Links.Next, nil
 }
 
 // GetProgram retrieves a specific bug bounty program from HackerOne

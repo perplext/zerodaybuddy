@@ -206,6 +206,68 @@ func TestBugcrowd_ListPrograms(t *testing.T) {
 	}
 }
 
+func TestBugcrowd_ListPrograms_Pagination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		page := r.URL.Query().Get("page")
+		switch page {
+		case "1":
+			response := map[string]interface{}{
+				"programs": []map[string]interface{}{
+					{"id": "1", "name": "Program 1", "code": "prog-1", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z"},
+					{"id": "2", "name": "Program 2", "code": "prog-2", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z"},
+				},
+				"meta": map[string]interface{}{
+					"total_pages":  3,
+					"current_page": 1,
+					"total_count":  5,
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+		case "2":
+			response := map[string]interface{}{
+				"programs": []map[string]interface{}{
+					{"id": "3", "name": "Program 3", "code": "prog-3", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z"},
+					{"id": "4", "name": "Program 4", "code": "prog-4", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z"},
+				},
+				"meta": map[string]interface{}{
+					"total_pages":  3,
+					"current_page": 2,
+					"total_count":  5,
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+		case "3":
+			response := map[string]interface{}{
+				"programs": []map[string]interface{}{
+					{"id": "5", "name": "Program 5", "code": "prog-5", "created_at": "2023-01-01T00:00:00Z", "updated_at": "2023-01-01T00:00:00Z"},
+				},
+				"meta": map[string]interface{}{
+					"total_pages":  3,
+					"current_page": 3,
+					"total_count":  5,
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+		default:
+			t.Errorf("unexpected page request: %s", page)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	cfg := config.BugcrowdConfig{APIUrl: server.URL, CookieValue: "test-cookie"}
+	logger := utils.NewLogger("", false)
+	bc := NewBugcrowd(cfg, logger)
+
+	programs, err := bc.ListPrograms(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, programs, 5)
+	assert.Equal(t, "Program 1", programs[0].Name)
+	assert.Equal(t, "Program 5", programs[4].Name)
+}
+
 func TestBugcrowd_GetProgram(t *testing.T) {
 	tests := []struct {
 		name               string
