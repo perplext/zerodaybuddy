@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"errors"
 	"html/template"
 	"net/http"
 
@@ -85,7 +84,7 @@ func (h *ProjectDetailHandler) show(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	project, err := h.store.GetProject(ctx, projectID)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if isNotFoundErr(err) {
 			http.NotFound(w, r)
 			return
 		}

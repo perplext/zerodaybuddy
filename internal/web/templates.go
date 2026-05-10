@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"path"
 	"strings"
 	"time"
 )
@@ -47,31 +48,85 @@ func templateFuncs() template.FuncMap {
 	}
 }
 
-// parseTemplates walks fsys for *.tmpl files at the root and parses them
-// into a single *template.Template tree with the standard funcMap attached.
+// pageSet is a name → *template.Template map. Each page-template instance
+// has its own private parse tree containing the shared partials plus that
+// page's content/title blocks. This isolates `{{define "title"}}` (and
+// `{{define "content"}}`) blocks so the last-parsed page doesn't shadow
+// earlier ones — which would happen with a single shared tree.
+//
+// Lookup is by page filename (e.g. "login.tmpl", "dashboard.tmpl"). The
+// boolean returned by Lookup signals whether the page is wired (used by
+// server.go to gate route registration). A nil pageSet from parseTemplates
+// (no templates present) is acceptable — Lookup returns nil + false.
+type pageSet map[string]*template.Template
+
+// Lookup returns the page template for the given name, or nil if absent.
+// Mirrors *template.Template.Lookup so handlers can swap a pageSet in for
+// a *template.Template with minimal churn.
+func (p pageSet) Lookup(name string) *template.Template {
+	if p == nil {
+		return nil
+	}
+	return p[name]
+}
+
+// parseTemplates builds a pageSet by:
+//
+//  1. Parsing every partial (filename starts with "_") into a base template.
+//  2. For each non-partial page template, cloning the base and parsing
+//     the page on top — yielding a per-page template instance.
+//
+// Per-page clones are required because Go's html/template tree treats
+// `{{define "X"}}` as global within a single template — last parse wins.
+// Without cloning, "title" and "content" blocks defined in the last-parsed
+// page silently shadow every other page's blocks at render time, producing
+// "can't evaluate field X in type Y" errors when the wrong page's data shape
+// reaches the wrong block.
 //
 // Returns nil + nil if no .tmpl files are present (acceptable for tests
-// that don't need rendering and for the bootstrap state where templates
+// that don't exercise rendering and for the bootstrap state where templates
 // haven't been added yet). Returns an error only on a parse failure.
 //
-// Templates are parsed once at server construction time per T2-3 D4. The
-// resulting tree should be stored on the Server and looked up by name from
-// handler methods via .Lookup("name.tmpl").
-func parseTemplates(fsys fs.FS) (*template.Template, error) {
-	t := template.New("").Funcs(templateFuncs())
-
-	// Glob first to detect "no templates yet" before ParseFS errors on it.
-	matches, err := fs.Glob(fsys, "embedded/templates/*.tmpl")
+// Templates are parsed once at server construction time per T2-3 D4.
+func parseTemplates(fsys fs.FS) (pageSet, error) {
+	allTemplates, err := fs.Glob(fsys, "embedded/templates/*.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("globbing templates: %w", err)
 	}
-	if len(matches) == 0 {
+	if len(allTemplates) == 0 {
 		return nil, nil
 	}
 
-	t, err = t.ParseFS(fsys, "embedded/templates/*.tmpl")
-	if err != nil {
-		return nil, fmt.Errorf("parsing templates: %w", err)
+	var partials, pages []string
+	for _, t := range allTemplates {
+		if strings.HasPrefix(path.Base(t), "_") {
+			partials = append(partials, t)
+		} else {
+			pages = append(pages, t)
+		}
 	}
-	return t, nil
+
+	// Base = funcMap + every partial. Pages clone from this and add their
+	// own content. If no partials exist, base is just an empty tree with the
+	// funcs attached.
+	base := template.New("").Funcs(templateFuncs())
+	if len(partials) > 0 {
+		if base, err = base.ParseFS(fsys, partials...); err != nil {
+			return nil, fmt.Errorf("parsing partials: %w", err)
+		}
+	}
+
+	out := make(pageSet, len(pages))
+	for _, p := range pages {
+		clone, err := base.Clone()
+		if err != nil {
+			return nil, fmt.Errorf("cloning base for %s: %w", p, err)
+		}
+		clone, err = clone.ParseFS(fsys, p)
+		if err != nil {
+			return nil, fmt.Errorf("parsing page %s: %w", p, err)
+		}
+		out[path.Base(p)] = clone
+	}
+	return out, nil
 }

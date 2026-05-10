@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"net/http"
 	"time"
@@ -50,7 +49,7 @@ type Server struct {
 	deps        Dependencies
 	logger      *utils.Logger
 	rateLimiter *middleware.RateLimiter
-	tmpl        *template.Template // parsed once at construction; nil if no templates exist (acceptable for tests)
+	tmpl        pageSet // parsed once at construction; nil if no templates exist (acceptable for tests)
 	server      *http.Server
 }
 
@@ -132,15 +131,15 @@ func (s *Server) buildRouter() http.Handler {
 	// without {$}, "/" would be a catch-all that masks ServeMux's 405 and
 	// 404 semantics for /api/* and /static/* routes.
 	dashboardWired := false
-	if s.deps.Store != nil && s.deps.AuthService != nil && s.tmpl != nil && s.tmpl.Lookup("dashboard.tmpl") != nil {
+	if s.deps.Store != nil && s.deps.AuthService != nil && s.tmpl.Lookup("dashboard.tmpl") != nil {
 		// Dashboard + project-detail browser pages go through OptionalAuth
 		// (cookie-aware). The handlers themselves 303 unauth'd visitors to
 		// /login — AuthMiddleware would 401 with JSON, which is awful UX
 		// for a browser navigating to a bookmarked page.
 		dashboardChain := append(s.publicChain(), middleware.OptionalAuth(s.deps.AuthService, s.logger))
-		handlers.NewDashboardHandler(s.deps.Store, s.tmpl, s.logger).RegisterRoutes(mux, dashboardChain)
+		handlers.NewDashboardHandler(s.deps.Store, s.tmpl.Lookup("dashboard.tmpl"), s.logger).RegisterRoutes(mux, dashboardChain)
 		if s.tmpl.Lookup("project_detail.tmpl") != nil {
-			handlers.NewProjectDetailHandler(s.deps.Store, s.tmpl, s.logger).RegisterRoutes(mux, dashboardChain)
+			handlers.NewProjectDetailHandler(s.deps.Store, s.tmpl.Lookup("project_detail.tmpl"), s.logger).RegisterRoutes(mux, dashboardChain)
 		}
 		dashboardWired = true
 	}
@@ -179,8 +178,8 @@ func (s *Server) buildRouter() http.Handler {
 	// login template are available. Public chain only; the handlers check
 	// auth state internally via OptionalAuth-populated context (U4 wires
 	// the optional-auth chain on the dashboard routes).
-	if s.deps.AuthService != nil && s.tmpl != nil && s.tmpl.Lookup("login.tmpl") != nil {
-		browserAuth := handlers.NewBrowserAuthHandler(s.deps.AuthService, s.tmpl, s.logger, s.config.EnableTLS)
+	if s.deps.AuthService != nil && s.tmpl.Lookup("login.tmpl") != nil {
+		browserAuth := handlers.NewBrowserAuthHandler(s.deps.AuthService, s.tmpl.Lookup("login.tmpl"), s.logger, s.config.EnableTLS)
 		// Browser routes need OptionalAuth so the GET /login handler can
 		// detect "already logged in" and 303 to /. Wrap the handler chain
 		// with OptionalAuth in addition to publicChain.

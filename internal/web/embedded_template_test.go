@@ -22,24 +22,35 @@ func TestEmbeddedTemplates_ParseClean(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, tmpl)
 
+	// Lookup is page-keyed in the new pageSet — partials are visible inside
+	// each page's template instance, not as top-level pageSet entries.
 	for _, name := range []string{
-		"_layout.tmpl",
-		"_header.tmpl",
 		"login.tmpl",
 		"dashboard.tmpl",
 		"project_detail.tmpl",
-		"_finding_row.tmpl",
 	} {
-		assert.NotNil(t, tmpl.Lookup(name), "template %s must be present", name)
+		assert.NotNil(t, tmpl.Lookup(name), "page %s must be present", name)
+	}
+
+	// Verify partials are accessible from inside a page (smoke that the
+	// clone-from-base machinery actually wired the partials).
+	loginPage := tmpl.Lookup("login.tmpl")
+	require.NotNil(t, loginPage)
+	for _, partial := range []string{"_layout.tmpl", "_header.tmpl"} {
+		assert.NotNil(t, loginPage.Lookup(partial),
+			"partial %s must be visible from a page-template clone", partial)
 	}
 }
 
 func TestEmbeddedTemplates_FindingRowEmitsHTMXTriageContract(t *testing.T) {
 	// Render a single _finding_row partial and assert the attributes the
 	// frontend (zdb.js + HTMX) depends on. This guards U6's wiring against
-	// silent template regressions.
+	// silent template regressions. We render through project_detail.tmpl's
+	// clone since the partial is only visible inside per-page instances.
 	tmpl, err := parseTemplates(EmbeddedFS)
 	require.NoError(t, err)
+	page := tmpl.Lookup("project_detail.tmpl")
+	require.NotNil(t, page, "project_detail page must be parsed")
 
 	finding := &models.Finding{
 		ID:       "abc-123",
@@ -50,7 +61,7 @@ func TestEmbeddedTemplates_FindingRowEmitsHTMXTriageContract(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, tmpl.ExecuteTemplate(&buf, "_finding_row.tmpl", finding))
+	require.NoError(t, page.ExecuteTemplate(&buf, "_finding_row.tmpl", finding))
 	body := buf.String()
 
 	// Triage <select> must point at the right endpoint and use json-enc.
