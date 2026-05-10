@@ -45,3 +45,8 @@ config.yaml
 # Temporary files
 tmp/
 temp/
+.todos/
+
+# Defensive: prevent regression of the SQLite ":memory:" sentinel being
+# misinterpreted as a filesystem path (see internal/storage/store.go).
+:memory:/

@@ -13,9 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getTestConfig() *config.Config {
+func getTestConfig(t *testing.T) *config.Config {
+	t.Helper()
 	return &config.Config{
-		DataDir: ":memory:",
+		DataDir: t.TempDir(),
 		LogDir:  "",
 		Logging: config.LoggingConfig{
 			Level:        "info",
@@ -43,7 +44,7 @@ func getTestConfig() *config.Config {
 }
 
 func TestNewApp(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	assert.NotNil(t, app)
@@ -54,7 +55,7 @@ func TestNewApp(t *testing.T) {
 }
 
 func TestAppInitialize(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -73,7 +74,7 @@ func TestAppInitialize(t *testing.T) {
 }
 
 func TestAppInitializeWithoutJWTSecret(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	cfg.WebServer.JWTSecret = ""
 	cfg.WebServer.JWTIssuer = ""
 	
@@ -86,7 +87,7 @@ func TestAppInitializeWithoutJWTSecret(t *testing.T) {
 }
 
 func TestGetAuthService(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -99,7 +100,7 @@ func TestGetAuthService(t *testing.T) {
 }
 
 func TestGetConfig(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	returnedCfg := app.GetConfig()
@@ -107,7 +108,7 @@ func TestGetConfig(t *testing.T) {
 }
 
 func TestListProgramsUnknownPlatform(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -120,7 +121,7 @@ func TestListProgramsUnknownPlatform(t *testing.T) {
 }
 
 func TestCreateProjectUnknownPlatform(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -133,7 +134,7 @@ func TestCreateProjectUnknownPlatform(t *testing.T) {
 }
 
 func TestListProjects(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -146,7 +147,7 @@ func TestListProjects(t *testing.T) {
 }
 
 func TestRunReconProjectNotFound(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -166,7 +167,7 @@ func TestRunReconProjectNotFound(t *testing.T) {
 }
 
 func TestRunScanProjectNotFound(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -179,7 +180,7 @@ func TestRunScanProjectNotFound(t *testing.T) {
 }
 
 func TestGenerateReportProjectNotFound(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	ctx := context.Background()
@@ -192,7 +193,7 @@ func TestGenerateReportProjectNotFound(t *testing.T) {
 }
 
 func TestServeWithCustomHostPort(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	cfg.DataDir = t.TempDir()
 	app := NewApp(cfg)
 
@@ -216,7 +217,7 @@ func TestServeWithCustomHostPort(t *testing.T) {
 }
 
 func TestServeWithoutInit(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	cfg.DataDir = t.TempDir()
 	app := NewApp(cfg)
 
@@ -233,7 +234,7 @@ func TestServeWithoutInit(t *testing.T) {
 }
 
 func TestRunReconWithoutInit(t *testing.T) {
-	cfg := getTestConfig()
+	cfg := getTestConfig(t)
 	app := NewApp(cfg)
 	
 	// Create a fresh store instance for this test
