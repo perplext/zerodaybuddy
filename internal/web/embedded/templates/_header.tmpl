@@ -1,0 +1,25 @@
+{{/* _header.tmpl — persistent app header.
+
+Shows logged-in user + logout button when .User is non-nil.
+Falls back to a single Login link otherwise. The login link uses /login,
+which is also where unauthenticated dashboard requests get redirected.
+*/}}
+<header class="container app-header">
+<nav>
+<ul>
+<li><strong><a href="/">ZeroDayBuddy</a></strong></li>
+</ul>
+<ul class="user-controls">
+{{if .User}}
+<li>Logged in as <code>{{.User.Username}}</code></li>
+<li>
+<form method="post" action="/logout">
+<button type="submit">Logout</button>
+</form>
+</li>
+{{else}}
+<li><a href="/login" role="button">Login</a></li>
+{{end}}
+</ul>
+</nav>
+</header>

@@ -1,0 +1,28 @@
+{{/* _layout.tmpl — base shell for every dashboard page.
+
+The strict CSP set by SecurityHeaders middleware (default-src 'self') means
+no inline scripts or styles, no external CDNs. All assets are loaded from
+/static/ — vendored and served via //go:embed.
+
+Pages embed this layout by defining a {{define "content"}}...{{end}} block
+and then calling {{template "_layout.tmpl" .}}.
+*/}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{block "title" .}}ZeroDayBuddy{{end}}</title>
+<link rel="stylesheet" href="/static/css/pico.min.css">
+<link rel="stylesheet" href="/static/css/zdb.css">
+</head>
+<body>
+{{template "_header.tmpl" .}}
+<main class="container">
+{{block "content" .}}{{end}}
+</main>
+<script src="/static/js/htmx.min.js" defer></script>
+<script src="/static/js/json-enc.js" defer></script>
+<script src="/static/js/zdb.js" defer></script>
+</body>
+</html>

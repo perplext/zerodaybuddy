@@ -1,0 +1,90 @@
+/*
+ * ZeroDayBuddy project-specific CSS overrides on top of Pico CSS.
+ * Keep this file under ~50 lines per the T2-3 plan; if it grows, that's
+ * a sign Pico's defaults aren't carrying their weight and we should
+ * either replace the framework or accept the size honestly.
+ */
+
+/* Tighter density for security-tool dashboards — Pico's defaults are
+   consumer-friendly which means generous spacing. */
+main {
+  max-width: 1200px;
+}
+
+/* Findings table: tighten row height, smaller font for density. */
+table.findings-table td,
+table.findings-table th {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+/* Triage form controls inside table cells — keep them compact. */
+table.findings-table select {
+  padding: 0.2rem 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
+  width: auto;
+}
+
+/* CLI-command panels: monospace, dark background, copy-button affordance. */
+.cli-panel pre {
+  margin: 0.25rem 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  background: var(--pico-code-background-color);
+  border-radius: var(--pico-border-radius);
+  overflow-x: auto;
+}
+
+.cli-panel button.copy {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+/* Triage-saved indicator (HTMX after-request flash). */
+.saved-indicator {
+  display: inline-block;
+  margin-left: 0.5rem;
+  color: var(--pico-color-green-600);
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.saved-indicator.visible {
+  opacity: 1;
+}
+
+/* Generic error banner. */
+.banner-error {
+  padding: 0.5rem 0.75rem;
+  background: var(--pico-color-red-100);
+  color: var(--pico-color-red-700);
+  border-left: 3px solid var(--pico-color-red-500);
+  margin: 0.75rem 0;
+}
+
+/* "You have been logged out" / similar info banner. */
+.banner-info {
+  padding: 0.5rem 0.75rem;
+  background: var(--pico-color-blue-100);
+  color: var(--pico-color-blue-700);
+  border-left: 3px solid var(--pico-color-blue-500);
+  margin: 0.75rem 0;
+}
+
+/* Header bar — keep username + logout button together on the right. */
+header.app-header nav ul.user-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+header.app-header nav ul.user-controls form {
+  margin: 0;
+}
+header.app-header nav ul.user-controls button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  margin: 0;
+}
