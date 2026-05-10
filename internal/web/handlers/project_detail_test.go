@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -22,17 +23,34 @@ import (
 // fakeProjectDetailStore is the in-memory test double for projectDetailStore.
 // Keeps each section's data + injectable error so the soft-error contract is
 // directly testable.
+//
+// wantProjectID, when non-empty, is the project ID every list method must be
+// called with — protects against the handler passing the wrong ID (or "")
+// from the URL path. Without this guard, ListHosts(""), ListFindings(""),
+// etc. would return the seeded slices regardless and tests would still pass.
 type fakeProjectDetailStore struct {
-	project      *models.Project
-	getProjErr   error
-	hosts        []*models.Host
-	hostsErr     error
-	endpoints    []*models.Endpoint
-	endpointsErr error
-	findings     []*models.Finding
-	findingsErr  error
-	tasks        []*models.Task
-	tasksErr     error
+	project       *models.Project
+	wantProjectID string // if set, list methods fail when called with a different ID
+	getProjErr    error
+	hosts         []*models.Host
+	hostsErr      error
+	endpoints     []*models.Endpoint
+	endpointsErr  error
+	findings      []*models.Finding
+	findingsErr   error
+	tasks         []*models.Task
+	tasksErr      error
+}
+
+// checkProjectID returns an error when wantProjectID is set and the caller
+// passed a different value. Returning an error here surfaces as a soft
+// section error in the handler, which the calling test can distinguish from
+// the seeded-data path.
+func (f *fakeProjectDetailStore) checkProjectID(method, gotID string) error {
+	if f.wantProjectID != "" && gotID != f.wantProjectID {
+		return fmt.Errorf("%s called with projectID=%q, want %q", method, gotID, f.wantProjectID)
+	}
+	return nil
 }
 
 func (f *fakeProjectDetailStore) GetProject(_ context.Context, id string) (*models.Project, error) {
@@ -45,19 +63,31 @@ func (f *fakeProjectDetailStore) GetProject(_ context.Context, id string) (*mode
 	return f.project, nil
 }
 
-func (f *fakeProjectDetailStore) ListHosts(_ context.Context, _ string) ([]*models.Host, error) {
+func (f *fakeProjectDetailStore) ListHosts(_ context.Context, projectID string) ([]*models.Host, error) {
+	if err := f.checkProjectID("ListHosts", projectID); err != nil {
+		return nil, err
+	}
 	return f.hosts, f.hostsErr
 }
 
-func (f *fakeProjectDetailStore) ListEndpointsByProject(_ context.Context, _ string) ([]*models.Endpoint, error) {
+func (f *fakeProjectDetailStore) ListEndpointsByProject(_ context.Context, projectID string) ([]*models.Endpoint, error) {
+	if err := f.checkProjectID("ListEndpointsByProject", projectID); err != nil {
+		return nil, err
+	}
 	return f.endpoints, f.endpointsErr
 }
 
-func (f *fakeProjectDetailStore) ListFindings(_ context.Context, _ string) ([]*models.Finding, error) {
+func (f *fakeProjectDetailStore) ListFindings(_ context.Context, projectID string) ([]*models.Finding, error) {
+	if err := f.checkProjectID("ListFindings", projectID); err != nil {
+		return nil, err
+	}
 	return f.findings, f.findingsErr
 }
 
-func (f *fakeProjectDetailStore) ListTasks(_ context.Context, _ string) ([]*models.Task, error) {
+func (f *fakeProjectDetailStore) ListTasks(_ context.Context, projectID string) ([]*models.Task, error) {
+	if err := f.checkProjectID("ListTasks", projectID); err != nil {
+		return nil, err
+	}
 	return f.tasks, f.tasksErr
 }
 
@@ -151,6 +181,7 @@ func TestProjectDetail_GetProjectStorageErrorReturns500(t *testing.T) {
 func TestProjectDetail_RendersAllFourSections(t *testing.T) {
 	now := time.Now()
 	store := &fakeProjectDetailStore{
+		wantProjectID: "p1", // every list method must scope to this ID
 		project: &models.Project{
 			ID: "p1", Name: "Acme Bug Bounty", Handle: "acme",
 			Platform: "hackerone", Status: models.ProjectStatusActive,
@@ -221,6 +252,7 @@ func TestProjectDetail_SoftSectionErrorsRenderInlineAndPageStillLoads(t *testing
 func TestProjectDetail_OneSectionErrorOthersStillRender(t *testing.T) {
 	now := time.Now()
 	store := &fakeProjectDetailStore{
+		wantProjectID: "p1",
 		project: &models.Project{
 			ID: "p1", Name: "Acme", Handle: "acme",
 			Platform: "hackerone", Status: models.ProjectStatusActive, UpdatedAt: now,

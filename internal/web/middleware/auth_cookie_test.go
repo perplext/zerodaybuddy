@@ -200,10 +200,14 @@ func (e mockErr) Error() string { return string(e) }
 // correctly. Catches subtle base64 / URL-encoding issues in the cookie
 // transport layer that mock-based tests would miss.
 func TestAuthMiddleware_RealJWTRoundtripViaCookie(t *testing.T) {
-	// Spin up a real auth.Service backed by in-memory SQLite (mirrors the
-	// pattern used in internal/web/router_test.go:setupAuthBackend).
-	db, err := sqlx.Connect("sqlite", ":memory:")
+	// Spin up a real auth.Service backed by in-memory SQLite. The DSN uses
+	// the shared-cache URI form and pool is pinned to one connection: with
+	// plain ":memory:" each pool connection gets its own isolated DB, so
+	// schema bootstrap on connection A is invisible to auth.Service queries
+	// on connection B and the test fails with "no such table".
+	db, err := sqlx.Connect("sqlite", "file::memory:?cache=shared")
 	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
 
 	_, err = db.Exec(`

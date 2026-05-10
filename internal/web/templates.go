@@ -16,9 +16,15 @@ import (
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		// cliCommand formats a "$ zerodaybuddy <cmd> [args...]" line for
-		// the copy-CLI-command panels (T2-3 D5). Args are space-joined.
+		// the copy-CLI-command panels (T2-3 D5). Each arg is shell-quoted so
+		// values containing spaces or shell metacharacters can't break or
+		// inject into the copied command. The fixed prefix and cmd are not
+		// quoted (cmd is always a literal subcommand name from a template).
 		"cliCommand": func(cmd string, args ...string) string {
-			parts := append([]string{"$ zerodaybuddy", cmd}, args...)
+			parts := []string{"$ zerodaybuddy", cmd}
+			for _, a := range args {
+				parts = append(parts, shellQuote(a))
+			}
 			return strings.Join(parts, " ")
 		},
 		// severityClass maps a finding severity to a CSS class for styling.
@@ -46,6 +52,44 @@ func templateFuncs() template.FuncMap {
 			return t.Format("2006-01-02 15:04")
 		},
 	}
+}
+
+// shellQuote wraps an argument in single quotes when (and only when) the
+// argument contains characters that aren't safe to copy verbatim into a
+// POSIX shell. Plain flag names ("--project") and tame identifiers
+// ("acme-demo") pass through unchanged so the rendered CLI command stays
+// readable. Values containing spaces, quotes, or shell metacharacters get
+// the standard '\'' quoting treatment so the copied command is still
+// syntactically one argument.
+func shellQuote(arg string) string {
+	if arg == "" {
+		return "''"
+	}
+	if shellSafe(arg) {
+		return arg
+	}
+	return "'" + strings.ReplaceAll(arg, "'", `'"'"'`) + "'"
+}
+
+// shellSafe reports whether s contains only characters POSIX shells treat
+// literally — alphanumeric plus a small set of safe punctuation. The
+// allowed set is intentionally conservative: anything else falls into
+// shellQuote's escaping path.
+func shellSafe(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9':
+			continue
+		}
+		switch r {
+		case '-', '_', '.', '/', ':', '=', ',', '@', '+':
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // pageSet is a name → *template.Template map. Each page-template instance

@@ -25,8 +25,15 @@ import (
 func setupBrowserAuthBackend(t *testing.T) *auth.Service {
 	t.Helper()
 
-	db, err := sqlx.Connect("sqlite", ":memory:")
+	// modernc.org/sqlite (and SQLite generally) gives every connection its
+	// own private in-memory DB when the DSN is plain ":memory:". sqlx pools
+	// connections, so schema bootstrap on one connection is invisible to
+	// auth.Service queries on another. Use the shared-cache URI DSN AND
+	// pin the pool to one connection to be safe — either alone is enough,
+	// but the combination is the no-surprises default.
+	db, err := sqlx.Connect("sqlite", "file::memory:?cache=shared")
 	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
 
 	_, err = db.Exec(`
@@ -89,7 +96,7 @@ func createTestUser(t *testing.T, ctx context.Context, svc *auth.Service, userna
 
 func TestBrowserAuth_GET_RendersForm(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	w := httptest.NewRecorder()
@@ -104,7 +111,7 @@ func TestBrowserAuth_GET_RendersForm(t *testing.T) {
 
 func TestBrowserAuth_GET_AlreadyAuthedRedirectsToRoot(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	user := &auth.User{ID: "u1", Username: "alice", Role: auth.RoleUser, Status: auth.StatusActive}
@@ -119,7 +126,7 @@ func TestBrowserAuth_GET_AlreadyAuthedRedirectsToRoot(t *testing.T) {
 
 func TestBrowserAuth_GET_LoggedOutQueryShowsBanner(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/login?logged-out=1", nil)
 	w := httptest.NewRecorder()
@@ -137,7 +144,7 @@ func TestBrowserAuth_POST_HappyPathSetsCookie(t *testing.T) {
 
 	for _, secure := range []bool{false, true} {
 		t.Run(secureLabel(secure), func(t *testing.T) {
-			h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), secure)
+			h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), secure, false)
 
 			form := url.Values{"username": {"alice"}, "password": {"ValidPass123!"}}
 			req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -168,7 +175,7 @@ func TestBrowserAuth_POST_HappyPathSetsCookie(t *testing.T) {
 func TestBrowserAuth_POST_InvalidCredentialsShowsGenericError(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
 	createTestUser(t, t.Context(), svc, "alice", "ValidPass123!")
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	form := url.Values{"username": {"alice"}, "password": {"WrongPassword!"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -187,7 +194,7 @@ func TestBrowserAuth_POST_InvalidCredentialsShowsGenericError(t *testing.T) {
 
 func TestBrowserAuth_POST_NonexistentUserShowsSameGenericError(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	form := url.Values{"username": {"nobody"}, "password": {"anything!"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -203,7 +210,7 @@ func TestBrowserAuth_POST_NonexistentUserShowsSameGenericError(t *testing.T) {
 
 func TestBrowserAuth_POST_EmptyFieldsRejected(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	form := url.Values{"username": {""}, "password": {""}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -227,7 +234,7 @@ func TestBrowserAuth_POST_LogoutClearsCookieAndRevokesSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Token)
 
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
 	req.AddCookie(&http.Cookie{Name: middleware.SessionCookieName, Value: resp.Token})
@@ -238,12 +245,20 @@ func TestBrowserAuth_POST_LogoutClearsCookieAndRevokesSession(t *testing.T) {
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/login?logged-out=1", w.Header().Get("Location"))
 
-	// Cookie cleared
+	// Cookie cleared. Browsers only "delete" a cookie when the clearing
+	// Set-Cookie matches the original on Path + Domain + Secure + SameSite
+	// — assert all of those, not just the value, otherwise a regression
+	// that drops Path="/" would leave the original cookie in the browser
+	// even though this test says "cleared".
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
-	assert.Equal(t, middleware.SessionCookieName, cookies[0].Name)
-	assert.Empty(t, cookies[0].Value)
-	assert.True(t, cookies[0].MaxAge < 0 || cookies[0].MaxAge == 0,
+	cleared := cookies[0]
+	assert.Equal(t, middleware.SessionCookieName, cleared.Name)
+	assert.Empty(t, cleared.Value)
+	assert.Equal(t, "/", cleared.Path)
+	assert.True(t, cleared.HttpOnly, "clear cookie must keep HttpOnly")
+	assert.Equal(t, http.SameSiteStrictMode, cleared.SameSite)
+	assert.True(t, cleared.MaxAge < 0 || cleared.MaxAge == 0,
 		"cookie must be deleted via MaxAge<=0")
 
 	// Session revoked: validating the previously-valid token now fails.
@@ -253,7 +268,7 @@ func TestBrowserAuth_POST_LogoutClearsCookieAndRevokesSession(t *testing.T) {
 
 func TestBrowserAuth_POST_LogoutWithoutCookieIsIdempotent(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
-	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false)
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
 	w := httptest.NewRecorder()
@@ -261,10 +276,16 @@ func TestBrowserAuth_POST_LogoutWithoutCookieIsIdempotent(t *testing.T) {
 
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/login?logged-out=1", w.Header().Get("Location"))
-	// Still sets the cleared cookie defensively
+	// Still sets the cleared cookie defensively. Same Path/SameSite/HttpOnly
+	// asserts as the with-cookie path so a regression on either path is
+	// caught equally.
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
-	assert.Empty(t, cookies[0].Value)
+	cleared := cookies[0]
+	assert.Empty(t, cleared.Value)
+	assert.Equal(t, "/", cleared.Path)
+	assert.True(t, cleared.HttpOnly)
+	assert.Equal(t, http.SameSiteStrictMode, cleared.SameSite)
 }
 
 // -- helpers --

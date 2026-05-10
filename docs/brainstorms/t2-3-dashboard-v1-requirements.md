@@ -112,7 +112,7 @@ $ zerodaybuddy recon --project foo --concurrent 10
 [ Copy command ]
 ```
 
-The copy button uses HTMX's `hx-on:click` with a tiny inline-data trick (or vendored `clipboard-copy.js` if needed). No backend involved.
+The copy button is wired by an external script (`/static/js/zdb.js`) that listens for clicks on `[data-clipboard-target]` and copies the adjacent `<code data-clipboard>` content via `navigator.clipboard.writeText`. No inline event handlers — those would violate the strict `default-src 'self'` CSP. No backend involved.
 
 This applies to:
 - Project create (`zerodaybuddy project create --platform hackerone --program ...`)
@@ -123,9 +123,9 @@ This applies to:
 
 ### D6. Triage works through the existing JSON PATCH endpoint
 
-HTMX's `json-enc` extension (or a small inline serializer) lets the triage form `hx-patch="/api/findings/{id}"` with a JSON body containing the changed fields. The existing handler from T2-2 is unchanged. The response can return a re-rendered HTML fragment (handler reads `Accept: text/html`) OR HTMX swaps in a minimal "saved ✓" indicator and re-fetches the row.
+HTMX's vendored `json-enc` extension lets the triage form `hx-patch="/api/findings/{id}"` with a JSON body containing the changed fields. The existing handler from T2-2 is unchanged. The response can return a re-rendered HTML fragment (handler reads `Accept: text/html`) OR HTMX uses `hx-swap="none"` and an external script listens for `htmx:afterRequest` to flash a "saved ✓" indicator.
 
-Recommend the latter (server returns JSON; HTMX handles UX feedback via `hx-on::after-request`) to avoid forking the API by content negotiation.
+Recommend the latter (server returns JSON; the external script in `/static/js/zdb.js` handles UX feedback via the `htmx:afterRequest` event listener) to avoid forking the API by content negotiation. No inline handlers — the strict CSP forbids them.
 
 ---
 

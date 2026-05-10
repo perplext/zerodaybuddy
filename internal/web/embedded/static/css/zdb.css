@@ -53,24 +53,28 @@ table.findings-table select {
   font-size: 0.85rem;
   min-width: 1.5em;
 }
-.triage-flash-ok { color: var(--pico-color-green-600); }
-.triage-flash-err { color: var(--pico-color-red-600); }
+/* Pico v2 doesn't expose a numeric color palette; the closest semantic tokens
+   are --pico-ins-color (positive/insert), --pico-del-color (negative/delete),
+   and --pico-primary. We use these for the success/error pairs and add
+   explicit RGBA fallbacks for the tinted backgrounds that have no token. */
+.triage-flash-ok { color: var(--pico-ins-color); }
+.triage-flash-err { color: var(--pico-del-color); }
 
 /* Generic error banner. */
 .banner-error {
   padding: 0.5rem 0.75rem;
-  background: var(--pico-color-red-100);
-  color: var(--pico-color-red-700);
-  border-left: 3px solid var(--pico-color-red-500);
+  background: rgba(183, 105, 106, 0.12);
+  color: var(--pico-del-color);
+  border-left: 3px solid var(--pico-del-color);
   margin: 0.75rem 0;
 }
 
 /* "You have been logged out" / similar info banner. */
 .banner-info {
   padding: 0.5rem 0.75rem;
-  background: var(--pico-color-blue-100);
-  color: var(--pico-color-blue-700);
-  border-left: 3px solid var(--pico-color-blue-500);
+  background: rgba(2, 154, 232, 0.12);
+  color: var(--pico-primary);
+  border-left: 3px solid var(--pico-primary);
   margin: 0.75rem 0;
 }
 

@@ -161,25 +161,28 @@ func (s *Server) buildRouter() http.Handler {
 	staticSubFS, err := fs.Sub(EmbeddedFS, "embedded/static")
 	if err != nil {
 		// EmbeddedFS structure is checked at compile time via //go:embed;
-		// a Sub error here would indicate a code bug, not runtime input.
-		s.logger.Error("Failed to derive embedded static sub-FS: %v", err)
-	} else {
-		staticServer := http.FileServer(noListFS{fs: http.FS(staticSubFS)})
-		// Static gets a thinner middleware chain — no rate limit, no body size.
-		// Reads are cheap and bodyless. (CORS is applied at the mux level below.)
-		staticChain := []func(http.Handler) http.Handler{
-			middleware.RecoverPanic(s.logger),
-			middleware.SecurityHeaders(s.logger),
-		}
-		mux.Handle("GET /static/", middleware.Chain(http.StripPrefix("/static/", staticServer), staticChain...))
+		// a Sub error here means the directory layout drifted from the
+		// embed directive — a code bug, not runtime input. Fail fast so
+		// the operator sees the problem immediately rather than starting
+		// a half-broken server with /static/* unregistered. Mirrors the
+		// template-parse panic in NewServer above.
+		panic("web: failed to derive embedded static sub-FS: " + err.Error())
 	}
+	staticServer := http.FileServer(noListFS{fs: http.FS(staticSubFS)})
+	// Static gets a thinner middleware chain — no rate limit, no body size.
+	// Reads are cheap and bodyless. (CORS is applied at the mux level below.)
+	staticChain := []func(http.Handler) http.Handler{
+		middleware.RecoverPanic(s.logger),
+		middleware.SecurityHeaders(s.logger),
+	}
+	mux.Handle("GET /static/", middleware.Chain(http.StripPrefix("/static/", staticServer), staticChain...))
 
 	// Browser auth routes (T2-3) — register when both AuthService and the
 	// login template are available. Public chain only; the handlers check
 	// auth state internally via OptionalAuth-populated context (U4 wires
 	// the optional-auth chain on the dashboard routes).
 	if s.deps.AuthService != nil && s.tmpl.Lookup("login.tmpl") != nil {
-		browserAuth := handlers.NewBrowserAuthHandler(s.deps.AuthService, s.tmpl.Lookup("login.tmpl"), s.logger, s.config.EnableTLS)
+		browserAuth := handlers.NewBrowserAuthHandler(s.deps.AuthService, s.tmpl.Lookup("login.tmpl"), s.logger, s.config.EnableTLS, s.config.ProxyEnabled)
 		// Browser routes need OptionalAuth so the GET /login handler can
 		// detect "already logged in" and 303 to /. Wrap the handler chain
 		// with OptionalAuth in addition to publicChain.

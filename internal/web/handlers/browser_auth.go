@@ -32,18 +32,26 @@ type BrowserAuthHandler struct {
 	authSvc      *auth.Service
 	tmpl         *template.Template
 	logger       *utils.Logger
-	cookieSecure bool // mirrors cfg.EnableTLS so localhost dev works
+	enableTLS    bool // server's own TLS config — direct-TLS deployments
+	proxyEnabled bool // when true, X-Forwarded-Proto is trusted as a TLS signal
 }
 
 // NewBrowserAuthHandler constructs a BrowserAuthHandler. tmpl must include
-// "login.tmpl"; cookieSecure should mirror the server's TLS configuration —
-// browsers reject Secure cookies on plain HTTP, so localhost dev needs false.
-func NewBrowserAuthHandler(authSvc *auth.Service, tmpl *template.Template, logger *utils.Logger, cookieSecure bool) *BrowserAuthHandler {
+// "login.tmpl".
+//
+// The cookie's Secure flag is decided per-request (see isSecureRequest) so
+// reverse-proxy deployments where TLS terminates upstream still issue Secure
+// cookies. enableTLS is the server's own TLS config (covers direct-TLS
+// deployments). proxyEnabled gates trust in X-Forwarded-Proto; when false,
+// the header is ignored to prevent header-injection attacks from a
+// non-proxy client claiming HTTPS.
+func NewBrowserAuthHandler(authSvc *auth.Service, tmpl *template.Template, logger *utils.Logger, enableTLS, proxyEnabled bool) *BrowserAuthHandler {
 	return &BrowserAuthHandler{
 		authSvc:      authSvc,
 		tmpl:         tmpl,
 		logger:       logger,
-		cookieSecure: cookieSecure,
+		enableTLS:    enableTLS,
+		proxyEnabled: proxyEnabled,
 	}
 }
 
@@ -102,7 +110,7 @@ func (h *BrowserAuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, h.makeSessionCookie(resp.Token))
+	http.SetCookie(w, h.makeSessionCookie(resp.Token, h.isSecureRequest(r)))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -117,35 +125,65 @@ func (h *BrowserAuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	http.SetCookie(w, h.makeClearedCookie())
+	http.SetCookie(w, h.makeClearedCookie(h.isSecureRequest(r)))
 	http.Redirect(w, r, "/login?logged-out=1", http.StatusSeeOther)
 }
 
-// makeSessionCookie builds the Set-Cookie value carrying the JWT.
-func (h *BrowserAuthHandler) makeSessionCookie(token string) *http.Cookie {
+// makeSessionCookie builds the Set-Cookie value carrying the JWT. secure
+// is decided per-request by the caller via isSecureRequest.
+func (h *BrowserAuthHandler) makeSessionCookie(token string, secure bool) *http.Cookie {
 	return &http.Cookie{
 		Name:     middleware.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   sessionCookieMaxAge,
 		HttpOnly: true,
-		Secure:   h.cookieSecure,
+		Secure:   secure,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
 
 // makeClearedCookie builds a Set-Cookie that immediately expires the session.
 // Browsers honor MaxAge=-1 (or 0 with Expires=epoch) by deleting the cookie.
-func (h *BrowserAuthHandler) makeClearedCookie() *http.Cookie {
+// The Secure flag must match the original cookie's flag — browsers won't
+// overwrite a Secure cookie with a non-Secure clearing cookie.
+func (h *BrowserAuthHandler) makeClearedCookie(secure bool) *http.Cookie {
 	return &http.Cookie{
 		Name:     middleware.SessionCookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   h.cookieSecure,
+		Secure:   secure,
 		SameSite: http.SameSiteStrictMode,
 	}
+}
+
+// isSecureRequest reports whether the cookie's Secure flag should be set
+// for this request. True when ANY of:
+//   - The request itself is TLS (r.TLS != nil) — direct-TLS deployments.
+//   - The server's TLS config is enabled (covers reverse proxies that route
+//     a plaintext loopback request to a TLS-terminating listener — rare).
+//   - proxyEnabled is true AND X-Forwarded-Proto says "https" — the common
+//     reverse-proxy deployment where the Go server speaks plain HTTP behind
+//     an upstream TLS terminator.
+//
+// proxyEnabled gates trust in X-Forwarded-Proto: a non-proxy client could
+// otherwise spoof the header and trick the server into issuing Secure
+// cookies on a plaintext connection (the cookie would silently fail to
+// transmit on the next request, breaking the session — annoying but not a
+// security hole, since browsers reject Secure cookies on http://).
+func (h *BrowserAuthHandler) isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if h.enableTLS {
+		return true
+	}
+	if h.proxyEnabled && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return true
+	}
+	return false
 }
 
 // renderLogin writes the login template with the given data. Errors during
