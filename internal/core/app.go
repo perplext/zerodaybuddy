@@ -130,6 +130,7 @@ func (a *App) Initialize(ctx context.Context) error {
 	a.webSvc = web.NewServer(a.config.WebServer, web.Dependencies{
 		AuthService: a.authSvc,
 		StaticDir:   staticDir,
+		Store:       a.store,
 	}, a.logger)
 	
 	a.logger.Info("ZeroDayBuddy initialized successfully")

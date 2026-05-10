@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/perplext/zerodaybuddy/internal/auth"
+	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/internal/web/handlers"
 	"github.com/perplext/zerodaybuddy/internal/web/middleware"
 	"github.com/perplext/zerodaybuddy/pkg/config"
@@ -32,9 +33,15 @@ const (
 // StaticDir is the filesystem path to serve under /static/. When empty, the
 // /static/ route is not registered. Production callers should pass an
 // absolute path so the binary works regardless of cwd.
+//
+// Store is the application's data layer. When nil, the data-model routes
+// (/api/projects, /api/hosts, etc.) are not registered. Tests construct
+// minimal servers with Dependencies{} to exercise auth-only or static-only
+// scenarios.
 type Dependencies struct {
 	AuthService *auth.Service
 	StaticDir   string
+	Store       storage.Store
 }
 
 // Server represents the web server for the ZeroDayBuddy UI
@@ -136,24 +143,39 @@ func (s *Server) buildRouter() http.Handler {
 
 	// Auth routes — registered only when AuthService is wired. Tests construct
 	// minimal servers with Dependencies{} for non-auth scenarios.
-	if s.deps.AuthService == nil {
+	if s.deps.AuthService != nil {
+		authHandler := handlers.NewAuthHandler(s.deps.AuthService, s.logger)
+		authHandler.SetProxyEnabled(s.config.ProxyEnabled)
+
+		publicAuth := s.publicChain()
+		authedAuth := s.authedChain()
+
+		mux.Handle("POST /api/auth/login", middleware.Chain(http.HandlerFunc(authHandler.Login), publicAuth...))
+		mux.Handle("POST /api/auth/register", middleware.Chain(http.HandlerFunc(authHandler.Register), publicAuth...))
+		mux.Handle("POST /api/auth/refresh", middleware.Chain(http.HandlerFunc(authHandler.RefreshToken), publicAuth...))
+
+		mux.Handle("POST /api/auth/logout", middleware.Chain(http.HandlerFunc(authHandler.Logout), authedAuth...))
+		mux.Handle("GET /api/auth/profile", middleware.Chain(http.HandlerFunc(authHandler.Profile), authedAuth...))
+		mux.Handle("POST /api/auth/change-password", middleware.Chain(http.HandlerFunc(authHandler.ChangePassword), authedAuth...))
+	} else {
 		s.logger.Warn("AuthService is nil; skipping /api/auth/* route registration")
-		return mux
 	}
 
-	authHandler := handlers.NewAuthHandler(s.deps.AuthService, s.logger)
-	authHandler.SetProxyEnabled(s.config.ProxyEnabled)
+	// Data-model routes — registered only when both Store and AuthService
+	// are wired. The handlers themselves don't gate on auth; the authedChain
+	// does. Without an AuthService, AuthMiddleware would 401 every request,
+	// so the routes would be reachable but useless — skip them too.
+	if s.deps.Store != nil && s.deps.AuthService != nil {
+		authedChain := s.authedChain()
 
-	publicAuth := s.publicChain()
-	authedAuth := s.authedChain()
-
-	mux.Handle("POST /api/auth/login", middleware.Chain(http.HandlerFunc(authHandler.Login), publicAuth...))
-	mux.Handle("POST /api/auth/register", middleware.Chain(http.HandlerFunc(authHandler.Register), publicAuth...))
-	mux.Handle("POST /api/auth/refresh", middleware.Chain(http.HandlerFunc(authHandler.RefreshToken), publicAuth...))
-
-	mux.Handle("POST /api/auth/logout", middleware.Chain(http.HandlerFunc(authHandler.Logout), authedAuth...))
-	mux.Handle("GET /api/auth/profile", middleware.Chain(http.HandlerFunc(authHandler.Profile), authedAuth...))
-	mux.Handle("POST /api/auth/change-password", middleware.Chain(http.HandlerFunc(authHandler.ChangePassword), authedAuth...))
+		handlers.NewProjectsHandler(s.deps.Store, s.logger).RegisterRoutes(mux, authedChain)
+		handlers.NewHostsHandler(s.deps.Store, s.logger).RegisterRoutes(mux, authedChain)
+		handlers.NewEndpointsHandler(s.deps.Store, s.logger).RegisterRoutes(mux, authedChain)
+		handlers.NewFindingsHandler(s.deps.Store, s.logger).RegisterRoutes(mux, authedChain)
+		handlers.NewTasksHandler(s.deps.Store, s.logger).RegisterRoutes(mux, authedChain)
+	} else if s.deps.Store == nil {
+		s.logger.Warn("Store is nil; skipping data-model route registration")
+	}
 
 	return s.applyCORS(mux)
 }
