@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 
 	pkgerrors "github.com/perplext/zerodaybuddy/pkg/errors"
@@ -159,10 +158,6 @@ func TestExitOnError(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := os.Args[0]
-			args := []string{"-test.run=TestExitOnError"}
-			cmd = fmt.Sprintf("%s %s", cmd, strings.Join(args, " "))
-			
 			env := []string{
 				"BE_EXIT_TEST=1",
 				fmt.Sprintf("EXIT_ERROR_TYPE=%s", tt.errorType),

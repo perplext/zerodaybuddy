@@ -481,8 +481,8 @@ func TestConcurrency(t *testing.T) {
 				Status:    "active",
 				FoundBy:   "test",
 			}
-			if err := store.CreateHost(ctx, host); err != nil {
-				errors <- err
+			if createErr := store.CreateHost(ctx, host); createErr != nil {
+				errors <- createErr
 			}
 			done <- true
 		}(i)

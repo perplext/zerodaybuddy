@@ -188,15 +188,15 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	// Execute the command
 	s.logger.Debug("Running Nuclei with args: %v", args)
 	cmd := exec.CommandContext(ctx, nucleiPath, args...)
-	if _, err := cmd.Output(); err != nil {
+	if _, cmdErr := cmd.Output(); cmdErr != nil {
 		// Nuclei may return non-zero exit code even when it finds issues
 		// Check if the output file exists and has content
 		if _, statErr := os.Stat(outputFile); statErr != nil {
 			// Check if it's an ExitError which might contain stderr
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				return nil, fmt.Errorf("nuclei failed: %v, stderr: %s", err, exitErr.Stderr)
+			if exitErr, ok := cmdErr.(*exec.ExitError); ok {
+				return nil, fmt.Errorf("nuclei failed: %v, stderr: %s", cmdErr, exitErr.Stderr)
 			}
-			return nil, fmt.Errorf("nuclei failed: %v", err)
+			return nil, fmt.Errorf("nuclei failed: %v", cmdErr)
 		}
 	}
 

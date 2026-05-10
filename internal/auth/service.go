@@ -150,7 +150,7 @@ func (s *Service) ValidateToken(ctx context.Context, tokenString string) (*User,
 	}
 
 	// Verify session still exists (ensures logout actually revokes access)
-	if _, err := s.store.GetSession(ctx, tokenString); err != nil {
+	if _, sessionErr := s.store.GetSession(ctx, tokenString); sessionErr != nil {
 		return nil, fmt.Errorf("session revoked")
 	}
 
@@ -240,8 +240,8 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, req *Change
 	}
 
 	// Validate new password
-	if err := ValidatePassword(req.NewPassword); err != nil {
-		return fmt.Errorf("new password validation failed: %w", err)
+	if validateErr := ValidatePassword(req.NewPassword); validateErr != nil {
+		return fmt.Errorf("new password validation failed: %w", validateErr)
 	}
 
 	// Hash new password

@@ -76,8 +76,8 @@ func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, 
 	outputFile := filepath.Join(tempDir, "httpx_output.json")
 
 	// Write domains to the temporary file
-	if err := os.WriteFile(domainsFile, []byte(strings.Join(hosts, "\n")), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write domains to file: %v", err)
+	if writeErr := os.WriteFile(domainsFile, []byte(strings.Join(hosts, "\n")), 0644); writeErr != nil {
+		return nil, fmt.Errorf("failed to write domains to file: %v", writeErr)
 	}
 
 	// Build command arguments
@@ -99,12 +99,12 @@ func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, 
 
 	// Execute the command
 	cmd := exec.CommandContext(ctx, httpxPath, args...)
-	if _, err := cmd.Output(); err != nil {
+	if _, cmdErr := cmd.Output(); cmdErr != nil {
 		// Check if it's an ExitError which might contain stderr
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("httpx failed: %v, stderr: %s", err, exitErr.Stderr)
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("httpx failed: %v, stderr: %s", cmdErr, exitErr.Stderr)
 		}
-		return nil, fmt.Errorf("httpx failed: %v", err)
+		return nil, fmt.Errorf("httpx failed: %v", cmdErr)
 	}
 
 	// Read and parse the output

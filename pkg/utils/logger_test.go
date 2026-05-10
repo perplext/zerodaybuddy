@@ -323,7 +323,7 @@ func TestLogger_FileLogging(t *testing.T) {
 
 	// Check if log file was created
 	logFile := filepath.Join(tempDir, "zerodaybuddy.log")
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(logFile); os.IsNotExist(statErr) {
 		t.Fatalf("Log file was not created: %s", logFile)
 	}
 
