@@ -61,7 +61,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        # Pinned to 1.25.10 to clear GO-2026-4982 (html/template XSS via
+        # incorrect URL escaping in tag attributes). Bump to the next 1.25.x
+        # patch when a security advisory targets this line again.
+        go-version: '1.25.10'
 
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v6
@@ -86,7 +89,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        # Pinned to 1.25.10 to clear GO-2026-4982 (html/template XSS via
+        # incorrect URL escaping in tag attributes). Bump to the next 1.25.x
+        # patch when a security advisory targets this line again.
+        go-version: '1.25.10'
 
     - name: Run govulncheck
       run: |

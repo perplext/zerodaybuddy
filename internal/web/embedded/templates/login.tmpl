@@ -1,0 +1,33 @@
+{{/* login.tmpl — login form. CSP-clean: no inline scripts/styles.
+
+Data shape: { User *auth.User, LoggedOut bool, Error string }
+- User is normally nil here (login page is for unauthed visitors); if a
+  logged-in user lands here the handler should 303 to / before render.
+- LoggedOut is true when the URL has ?logged-out=1 — show the friendly
+  "you have been logged out" banner.
+- Error is a generic "Invalid username or password" string after a failed
+  POST. Don't leak which field was wrong.
+*/}}
+{{define "title"}}Log in — ZeroDayBuddy{{end}}
+{{define "content"}}
+<h1>Log in</h1>
+
+{{if .LoggedOut}}
+<p class="banner-info">You have been logged out.</p>
+{{end}}
+
+{{if .Error}}
+<p class="banner-error">{{.Error}}</p>
+{{end}}
+
+<form method="post" action="/login">
+<label for="username">Username
+<input type="text" id="username" name="username" required autofocus autocomplete="username">
+</label>
+<label for="password">Password
+<input type="password" id="password" name="password" required autocomplete="current-password">
+</label>
+<button type="submit">Log in</button>
+</form>
+{{end}}
+{{template "_layout.tmpl" .}}

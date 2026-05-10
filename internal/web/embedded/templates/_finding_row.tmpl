@@ -1,0 +1,42 @@
+{{/* _finding_row.tmpl — single row in the findings table.
+
+Data shape: a *models.Finding (passed via {{template "_finding_row.tmpl" .}}
+inside a {{range .Findings}} loop in project_detail.tmpl).
+
+The status cell is an HTMX-driven inline triage control:
+  - <select hx-patch="/api/findings/{{.ID}}" hx-ext="json-enc" hx-swap="none">
+  - On change, fires PATCH with body {"status": "<new value>"}.
+  - hx-swap="none" — server is authoritative; user reloads to confirm.
+  - zdb.js wires htmx:afterRequest to flash a ✓ next to the row when the
+    PATCH succeeds (or ✗ on failure).
+
+CSRF: the session cookie is SameSite=Strict, so cross-site PATCHes can't
+attach the cookie. No explicit CSRF tokens needed.
+
+Authorization: per U1, AuthMiddleware on /api/* reads the cookie OR
+Authorization header. The browser's HTMX request rides the cookie.
+*/}}
+{{define "_finding_row.tmpl"}}
+<tr data-finding-id="{{.ID}}">
+<td><span class="severity-badge {{severityClass (printf "%s" .Severity)}}">{{.Severity}}</span></td>
+<td>{{.Title}}</td>
+<td>
+<select
+  name="status"
+  hx-patch="/api/findings/{{.ID}}"
+  hx-ext="json-enc"
+  hx-trigger="change"
+  hx-swap="none"
+  data-triage-status="{{.Status}}">
+<option value="new"           {{if eq (printf "%s" .Status) "new"}}selected{{end}}>new</option>
+<option value="confirmed"     {{if eq (printf "%s" .Status) "confirmed"}}selected{{end}}>confirmed</option>
+<option value="duplicate"     {{if eq (printf "%s" .Status) "duplicate"}}selected{{end}}>duplicate</option>
+<option value="false_positive"{{if eq (printf "%s" .Status) "false_positive"}}selected{{end}}>false positive</option>
+<option value="reported"      {{if eq (printf "%s" .Status) "reported"}}selected{{end}}>reported</option>
+<option value="resolved"      {{if eq (printf "%s" .Status) "resolved"}}selected{{end}}>resolved</option>
+</select>
+<span class="triage-flash" data-triage-flash></span>
+</td>
+<td>{{formatTime .FoundAt}}</td>
+</tr>
+{{end}}

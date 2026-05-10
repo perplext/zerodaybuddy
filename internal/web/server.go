@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"time"
 
@@ -23,24 +24,22 @@ const (
 )
 
 // Dependencies bundles the application services and resources the web server
-// needs to wire HTTP routes. Add fields here as new handler families come
-// online (T2-2 will add ProjectStore, HostStore, etc.).
+// needs to wire HTTP routes.
 //
 // AuthService may be nil — when nil, NewServer skips auth-route registration
 // and logs a warning at startup. This makes it possible to construct minimal
 // servers in tests without spinning up the full auth stack.
 //
-// StaticDir is the filesystem path to serve under /static/. When empty, the
-// /static/ route is not registered. Production callers should pass an
-// absolute path so the binary works regardless of cwd.
-//
 // Store is the application's data layer. When nil, the data-model routes
 // (/api/projects, /api/hosts, etc.) are not registered. Tests construct
 // minimal servers with Dependencies{} to exercise auth-only or static-only
 // scenarios.
+//
+// Static assets and templates are bundled into the binary via //go:embed
+// (see embedded.go) — there is no StaticDir field. The binary is location-
+// independent and serves /static/* from the embedded FS regardless of cwd.
 type Dependencies struct {
 	AuthService *auth.Service
-	StaticDir   string
 	Store       storage.Store
 }
 
@@ -50,20 +49,33 @@ type Server struct {
 	deps        Dependencies
 	logger      *utils.Logger
 	rateLimiter *middleware.RateLimiter
+	tmpl        pageSet // parsed once at construction; nil if no templates exist (acceptable for tests)
 	server      *http.Server
 }
 
-// NewServer creates a new web server with the given dependencies.
+// NewServer creates a new web server with the given dependencies. Parses
+// templates from EmbeddedFS once at construction. Panics if templates exist
+// but fail to parse — startup failure is the right outcome for templates
+// that ship with the binary, and surfaces clearly in `zerodaybuddy serve`.
 func NewServer(cfg config.WebServerConfig, deps Dependencies, logger *utils.Logger) *Server {
 	rl := middleware.NewRateLimiter(middleware.RateLimitConfig{
 		RequestsPerSecond: defaultRateLimitRPS,
 		Burst:             defaultRateLimitBurst,
 	}, logger)
+
+	tmpl, err := parseTemplates(EmbeddedFS)
+	if err != nil {
+		// Templates ship with the binary — a parse error is a programmer
+		// error caught at startup, not a runtime condition to recover from.
+		panic("web: failed to parse embedded templates: " + err.Error())
+	}
+
 	return &Server{
 		config:      cfg,
 		deps:        deps,
 		logger:      logger,
 		rateLimiter: rl,
+		tmpl:        tmpl,
 	}
 }
 
@@ -112,33 +124,70 @@ func (s *Server) buildRouter() http.Handler {
 	})
 	mux.Handle("GET /health", middleware.Chain(healthHandler, s.publicChain()...))
 
-	// Index — minimal API-documentation stub. CSP-clean (no inline JS/CSS) so
-	// the strict default-src 'self' from SecurityHeaders doesn't break it.
+	// Index — registered later by DashboardHandler when Store + AuthService +
+	// dashboard template are all available. Falls back to a minimal API-doc
+	// stub when any prerequisite is missing (test servers, no-storage mode).
 	// Registered with the {$} wildcard so it matches exactly "/" only;
 	// without {$}, "/" would be a catch-all that masks ServeMux's 405 and
 	// 404 semantics for /api/* and /static/* routes.
-	indexHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(indexHTML)); err != nil {
-			s.logger.Error("Failed to write index response: %v", err)
+	dashboardWired := false
+	if s.deps.Store != nil && s.deps.AuthService != nil && s.tmpl.Lookup("dashboard.tmpl") != nil {
+		// Dashboard + project-detail browser pages go through OptionalAuth
+		// (cookie-aware). The handlers themselves 303 unauth'd visitors to
+		// /login — AuthMiddleware would 401 with JSON, which is awful UX
+		// for a browser navigating to a bookmarked page.
+		dashboardChain := append(s.publicChain(), middleware.OptionalAuth(s.deps.AuthService, s.logger))
+		handlers.NewDashboardHandler(s.deps.Store, s.tmpl.Lookup("dashboard.tmpl"), s.logger).RegisterRoutes(mux, dashboardChain)
+		if s.tmpl.Lookup("project_detail.tmpl") != nil {
+			handlers.NewProjectDetailHandler(s.deps.Store, s.tmpl.Lookup("project_detail.tmpl"), s.logger).RegisterRoutes(mux, dashboardChain)
 		}
-	})
-	mux.Handle("GET /{$}", middleware.Chain(indexHandler, s.publicChain()...))
+		dashboardWired = true
+	}
+	if !dashboardWired {
+		indexHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write([]byte(indexHTML)); err != nil {
+				s.logger.Error("Failed to write index response: %v", err)
+			}
+		})
+		mux.Handle("GET /{$}", middleware.Chain(indexHandler, s.publicChain()...))
+	}
 
-	// Static file server — only registered when StaticDir is configured.
-	// Uses noListFS to suppress directory indexes (so /static/css/ returns
-	// 404 instead of an HTML directory listing). Path traversal is handled
-	// by http.FileServer's built-in path cleaning.
-	if s.deps.StaticDir != "" {
-		fs := http.FileServer(noListFS{http.Dir(s.deps.StaticDir)})
-		// Static gets a thinner middleware chain — no rate limit, no body size.
-		// Reads are cheap and bodyless. (CORS is applied at the mux level below.)
-		staticChain := []func(http.Handler) http.Handler{
-			middleware.RecoverPanic(s.logger),
-			middleware.SecurityHeaders(s.logger),
-		}
-		mux.Handle("GET /static/", middleware.Chain(http.StripPrefix("/static/", fs), staticChain...))
+	// Static file server — backed by the embedded FS. Always registered (the
+	// embedded FS is part of the binary, not a configurable filesystem path).
+	// noListFS suppresses directory indexes; http.FileServer's built-in path
+	// cleaning handles traversal.
+	staticSubFS, err := fs.Sub(EmbeddedFS, "embedded/static")
+	if err != nil {
+		// EmbeddedFS structure is checked at compile time via //go:embed;
+		// a Sub error here means the directory layout drifted from the
+		// embed directive — a code bug, not runtime input. Fail fast so
+		// the operator sees the problem immediately rather than starting
+		// a half-broken server with /static/* unregistered. Mirrors the
+		// template-parse panic in NewServer above.
+		panic("web: failed to derive embedded static sub-FS: " + err.Error())
+	}
+	staticServer := http.FileServer(noListFS{fs: http.FS(staticSubFS)})
+	// Static gets a thinner middleware chain — no rate limit, no body size.
+	// Reads are cheap and bodyless. (CORS is applied at the mux level below.)
+	staticChain := []func(http.Handler) http.Handler{
+		middleware.RecoverPanic(s.logger),
+		middleware.SecurityHeaders(s.logger),
+	}
+	mux.Handle("GET /static/", middleware.Chain(http.StripPrefix("/static/", staticServer), staticChain...))
+
+	// Browser auth routes (T2-3) — register when both AuthService and the
+	// login template are available. Public chain only; the handlers check
+	// auth state internally via OptionalAuth-populated context (U4 wires
+	// the optional-auth chain on the dashboard routes).
+	if s.deps.AuthService != nil && s.tmpl.Lookup("login.tmpl") != nil {
+		browserAuth := handlers.NewBrowserAuthHandler(s.deps.AuthService, s.tmpl.Lookup("login.tmpl"), s.logger, s.config.EnableTLS, s.config.ProxyEnabled)
+		// Browser routes need OptionalAuth so the GET /login handler can
+		// detect "already logged in" and 303 to /. Wrap the handler chain
+		// with OptionalAuth in addition to publicChain.
+		browserChain := append(s.publicChain(), middleware.OptionalAuth(s.deps.AuthService, s.logger))
+		browserAuth.RegisterRoutes(mux, browserChain)
 	}
 
 	// Auth routes — registered only when AuthService is wired. Tests construct

@@ -1,0 +1,56 @@
+{{/* dashboard.tmpl — landing page for an authenticated user.
+
+Data shape: { User *auth.User, Projects []*models.Project, Error string }
+- User is always present (the handler 303s to /login when nil).
+- Projects is the full project list, pre-sorted (active first, then most-
+  recent UpdatedAt within each status bucket).
+- Error is a soft message shown when storage failed; non-empty means the
+  table renders empty and the banner explains why.
+
+Action posture (per T2-3 D5): "Create project" is shown as a copy-able CLI
+command, NOT a form submit. v1 deliberately ships zero new HTTP endpoints.
+*/}}
+{{define "title"}}Dashboard — ZeroDayBuddy{{end}}
+{{define "content"}}
+<h1>Projects</h1>
+
+{{if .Error}}
+<p class="banner-error">{{.Error}}</p>
+{{end}}
+
+{{if .Projects}}
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Handle</th>
+<th>Platform</th>
+<th>Status</th>
+<th>Updated</th>
+</tr>
+</thead>
+<tbody>
+{{range .Projects}}
+<tr>
+<td><a href="/projects/{{.ID}}">{{.Name}}</a></td>
+<td><code>{{.Handle}}</code></td>
+<td>{{.Platform}}</td>
+<td>{{.Status}}</td>
+<td>{{formatTime .UpdatedAt}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{else if not .Error}}
+<p>No projects yet. Create one with the CLI:</p>
+{{end}}
+
+<section class="cli-panel" aria-labelledby="create-project-title">
+<h2 id="create-project-title">Create a project</h2>
+<p>Project creation lives in the CLI in v1. Run:</p>
+<pre><code data-clipboard>{{cliCommand "project" "create" "--handle" "YOUR_HANDLE" "--platform" "hackerone"}}</code></pre>
+<button type="button" data-clipboard-target="prev">Copy</button>
+<p class="cli-hint">Or import an existing program: <code data-clipboard>zerodaybuddy list-programs</code> shows what's available on your configured platforms.</p>
+</section>
+{{end}}
+{{template "_layout.tmpl" .}}

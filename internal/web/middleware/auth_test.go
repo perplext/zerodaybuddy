@@ -44,16 +44,22 @@ func TestAuthMiddleware(t *testing.T) {
 			expectedBody:   "Authorization header required",
 		},
 		{
+			// T2-3 (U1) changed behavior: a malformed Authorization header now
+			// falls through to the cookie check. With no cookie present, the
+			// outcome is the same as "no auth at all" — 401 with "Authorization
+			// header required". Mixed-transport clients (browser with stale
+			// header from a JS extension AND a valid cookie) succeed; before
+			// T2-3 they'd 401 on the bad header before the cookie was inspected.
 			name:           "invalid authorization format - no bearer",
 			authHeader:     "InvalidToken",
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   "Invalid authorization header format",
+			expectedBody:   "Authorization header required",
 		},
 		{
 			name:           "invalid authorization format - wrong prefix",
 			authHeader:     "Basic dGVzdDp0ZXN0",
 			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   "Invalid authorization header format",
+			expectedBody:   "Authorization header required",
 		},
 		{
 			name:       "invalid token",

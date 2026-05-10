@@ -158,11 +158,15 @@ func TestRouter_ProtectedRouteRequiresAuthHeader(t *testing.T) {
 func TestRouter_ProtectedRouteRejectsBadBearerFormat(t *testing.T) {
 	srv := newTestServerWithAuth(t)
 
+	// T2-3 (U1) changed behavior: a malformed Authorization header falls
+	// through to the cookie check. With no cookie present, the response is
+	// "Authorization header required" (same as no auth at all). Pre-T2-3
+	// this returned a distinct "Invalid authorization header format" message.
 	w := doRequest(t, srv, http.MethodGet, "/api/auth/profile", nil, map[string]string{
 		"Authorization": "Basic dXNlcjpwYXNz",
 	})
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "Invalid authorization header format")
+	assert.Contains(t, w.Body.String(), "Authorization header required")
 }
 
 func TestRouter_ProtectedRouteRejectsInvalidToken(t *testing.T) {
