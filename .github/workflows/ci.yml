@@ -61,12 +61,14 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version: '1.25'
 
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v6
       with:
-        version: latest
+        # Pinned to last v1 — v2 is a config-format breaking change that
+        # requires migrating .golangci.yml. See docs/plans/2026-05-10-002-*.
+        version: v1.64.8
         args: --timeout=3m
 
   security:
@@ -80,7 +82,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version: '1.25'
 
     - name: Run govulncheck
       run: |
