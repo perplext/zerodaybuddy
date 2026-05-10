@@ -161,8 +161,16 @@ func TestStatic_PathTraversalBlocked(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, p, nil)
 			w := httptest.NewRecorder()
 			srv.buildRouter().ServeHTTP(w, req)
+			// Body MUST NOT contain the leaked content (primary security check).
 			assert.NotContains(t, w.Body.String(), "LEAKED",
 				"path traversal must not expose files outside StaticDir")
+			// Status MUST NOT be 200 — http.FileServer's path cleaning either
+			// 404s (file outside root after cleaning) or 301-redirects to a
+			// canonical form that still resolves inside the root. A 200 here
+			// would mean we successfully served something we shouldn't have,
+			// even if the body check happens to pass for unrelated reasons.
+			assert.NotEqual(t, http.StatusOK, w.Code,
+				"path traversal must not return 200 (got %d)", w.Code)
 		})
 	}
 }

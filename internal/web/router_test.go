@@ -240,6 +240,59 @@ func TestRouter_CORSEnabledWhenOriginAllowed(t *testing.T) {
 	assert.Equal(t, "http://localhost:3000", w.Header().Get("Access-Control-Allow-Origin"))
 }
 
+// TestRouter_CORSPreflightOnAuthRouteSucceeds proves the fix for the CodeRabbit
+// finding on PR #19: Go 1.22 ServeMux's method-prefixed route patterns
+// ("POST /api/auth/login") do NOT match OPTIONS preflight requests. Per-route
+// middleware never runs for OPTIONS in that setup, so a browser's CORS preflight
+// would 405 before CORS could respond. Fix: CORS is wrapped at the mux level
+// in buildRouter (see Server.applyCORS), making it run for every request
+// including OPTIONS regardless of registered method handlers.
+func TestRouter_CORSPreflightOnAuthRouteSucceeds(t *testing.T) {
+	authSvc := setupAuthBackend(t)
+	srv := NewServer(
+		config.WebServerConfig{AllowedOrigins: []string{"http://localhost:3000"}},
+		Dependencies{AuthService: authSvc},
+		utils.NewLogger("", false),
+	)
+
+	// OPTIONS preflight to a POST-only route. Without the fix, this would 405.
+	w := doRequest(t, srv, http.MethodOptions, "/api/auth/login", nil, map[string]string{
+		"Origin":                         "http://localhost:3000",
+		"Access-Control-Request-Method":  "POST",
+		"Access-Control-Request-Headers": "Authorization, Content-Type",
+	})
+
+	// CORS middleware short-circuits OPTIONS with 204 + headers when the origin
+	// is in the allow-list (see middleware.CORS implementation in security.go).
+	assert.Equal(t, http.StatusNoContent, w.Code,
+		"OPTIONS preflight must succeed (204), not 405; CORS must run before method-pattern dispatch")
+	assert.Equal(t, "http://localhost:3000", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Methods"))
+	assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Headers"))
+}
+
+// TestRouter_CORSPreflightOnUnknownRouteStillSucceeds — the CORS middleware wraps
+// the entire mux, so even OPTIONS preflight to a path that has no registered
+// handler returns the CORS 204 (preflight is browser-driven and shouldn't reveal
+// path existence). Acts as a sanity check that mux-level wrapping is functioning
+// regardless of underlying route registration.
+func TestRouter_CORSPreflightOnUnknownRouteStillSucceeds(t *testing.T) {
+	authSvc := setupAuthBackend(t)
+	srv := NewServer(
+		config.WebServerConfig{AllowedOrigins: []string{"http://localhost:3000"}},
+		Dependencies{AuthService: authSvc},
+		utils.NewLogger("", false),
+	)
+
+	w := doRequest(t, srv, http.MethodOptions, "/api/totally-not-registered", nil, map[string]string{
+		"Origin":                        "http://localhost:3000",
+		"Access-Control-Request-Method": "POST",
+	})
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "http://localhost:3000", w.Header().Get("Access-Control-Allow-Origin"))
+}
+
 // -- Happy path: login then use returned token to access profile --
 
 func TestRouter_LoginThenProfileWithTokenSucceeds(t *testing.T) {

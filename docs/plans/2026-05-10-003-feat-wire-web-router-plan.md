@@ -81,7 +81,7 @@ The cost of the standard library: per-route middleware composition is verbose. M
 
 Composing `func(http.Handler) http.Handler` middlewares manually requires nested wrapping. A small helper:
 
-```
+```text
 chain(handler, mw1, mw2, mw3)  →  mw1(mw2(mw3(handler)))
 ```
 
@@ -93,7 +93,7 @@ This is intentionally NOT a feature-rich router — just composition. If routing
 
 The existing `Server.RegisterService(name string, service interface{})` is unused (no callers in the repo) and untyped. Replace it with a typed `Dependencies` struct passed to `NewServer`:
 
-```
+```go
 type Dependencies struct {
     AuthService *auth.Service
     // future T2-2 additions: ProjectStore, HostStore, etc.

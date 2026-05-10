@@ -60,19 +60,18 @@ func NewServer(cfg config.WebServerConfig, deps Dependencies, logger *utils.Logg
 	}
 }
 
-// publicChain returns the middleware stack applied to every web request.
-// Order: RecoverPanic (outermost) -> SecurityHeaders -> MaxBodySize -> RateLimit -> CORS (when configured).
+// publicChain returns the per-route middleware stack.
+// Order: RecoverPanic (outermost) -> SecurityHeaders -> MaxBodySize -> RateLimit.
+// CORS is intentionally NOT in this chain — it's applied at the mux level in
+// buildRouter so OPTIONS preflight requests are handled before method-pattern
+// dispatch. See the CORS wrapping in buildRouter for details.
 func (s *Server) publicChain() []func(http.Handler) http.Handler {
-	chain := []func(http.Handler) http.Handler{
+	return []func(http.Handler) http.Handler{
 		middleware.RecoverPanic(s.logger),
 		middleware.SecurityHeaders(s.logger),
 		middleware.MaxBodySize(defaultMaxBodyBytes, s.logger),
 		s.rateLimiter.Middleware(),
 	}
-	if len(s.config.AllowedOrigins) > 0 {
-		chain = append(chain, middleware.CORS(s.config.AllowedOrigins, s.logger))
-	}
-	return chain
 }
 
 // authedChain extends publicChain with AuthMiddleware. Caller must ensure
@@ -127,13 +126,10 @@ func (s *Server) buildRouter() http.Handler {
 	if s.deps.StaticDir != "" {
 		fs := http.FileServer(noListFS{http.Dir(s.deps.StaticDir)})
 		// Static gets a thinner middleware chain — no rate limit, no body size.
-		// Reads are cheap and bodyless.
+		// Reads are cheap and bodyless. (CORS is applied at the mux level below.)
 		staticChain := []func(http.Handler) http.Handler{
 			middleware.RecoverPanic(s.logger),
 			middleware.SecurityHeaders(s.logger),
-		}
-		if len(s.config.AllowedOrigins) > 0 {
-			staticChain = append(staticChain, middleware.CORS(s.config.AllowedOrigins, s.logger))
 		}
 		mux.Handle("GET /static/", middleware.Chain(http.StripPrefix("/static/", fs), staticChain...))
 	}
@@ -159,7 +155,25 @@ func (s *Server) buildRouter() http.Handler {
 	mux.Handle("GET /api/auth/profile", middleware.Chain(http.HandlerFunc(authHandler.Profile), authedAuth...))
 	mux.Handle("POST /api/auth/change-password", middleware.Chain(http.HandlerFunc(authHandler.ChangePassword), authedAuth...))
 
-	return mux
+	return s.applyCORS(mux)
+}
+
+// applyCORS wraps the entire mux with CORS middleware when AllowedOrigins is
+// non-empty. This must be applied at the mux level (not in per-route chains)
+// because Go 1.22 ServeMux's method-prefixed patterns ("POST /api/auth/login",
+// etc.) do not match OPTIONS preflight requests — those would 405 at the
+// routing layer before any per-route middleware ran. Wrapping the mux makes
+// CORS run for every request, including OPTIONS preflight, regardless of
+// whether the path+method combination has a registered handler.
+//
+// The CORS middleware itself short-circuits OPTIONS with 204 + headers when
+// the Origin is in the allow-list, and otherwise delegates to the wrapped
+// handler unchanged.
+func (s *Server) applyCORS(handler http.Handler) http.Handler {
+	if len(s.config.AllowedOrigins) == 0 {
+		return handler
+	}
+	return middleware.CORS(s.config.AllowedOrigins, s.logger)(handler)
 }
 
 // Start starts the web server
