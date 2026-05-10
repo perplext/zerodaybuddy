@@ -1,121 +1,52 @@
-# ZeroDayBuddy TODO List
+# ZeroDayBuddy TODO
 
-This document outlines the current and future development tasks for the ZeroDayBuddy project. It is intended for contributors to understand the project roadmap and identify areas where they can contribute.
+> **The active prioritized backlog lives in [`docs/brainstorms/codebase-punch-list-requirements.md`](docs/brainstorms/codebase-punch-list-requirements.md).** That document is organized by tier (correctness → hygiene → leverage → expansion → polish) with effort estimates, dependency ordering, and rationale for each item.
+>
+> This `TODO.md` is a thin pointer to the punch list, plus historical record of what's been done. To avoid drift between two parallel priority lists, do not add new "to-do" items here — add them to the brainstorm doc instead.
 
-## High Priority Tasks
+## Where to find what's pending
 
-### Core Functionality
+| Question | Where to look |
+|---|---|
+| What's next on correctness? | Punch list — Tier 0 (now closed via PR #16) and Tier 1 (in progress) |
+| What's the highest-leverage feature work? | Punch list — Tier 2 (wire the web router) |
+| What expands the user base? | Punch list — Tier 3 (manual project mode, hacker workflow) |
+| What's the polish backlog? | Punch list — Tier 4 |
+| What's explicitly out of scope? | Punch list — "Out of Scope" section (ML, plugin system, alt DB backends, etc.) |
+| What's been done? | This file's "Completed" section + `CHANGELOG.md` |
 
-- [ ] Implement input validation for all user-facing commands
-- [ ] Add robust error handling throughout the codebase
-- [ ] Create unit tests for core components (aim for >80% coverage)
-- [ ] Improve logging system with configurable verbosity levels
-- [ ] Implement proper signal handling for graceful shutdown
+## Completed (post-v0.1.0)
 
-### Report System Enhancements
+These items were originally listed as "high priority" in earlier versions of this file; they have shipped in subsequent phases of work and are no longer pending.
 
-- [ ] Add support for additional report formats (docx, pptx)
-- [ ] Implement template customization for reports
-- [ ] Create visualization components for vulnerability metrics
-- [ ] Add report filtering options by severity, status, etc.
-- [ ] Implement export capabilities to bug bounty platform formats
+- [x] Input validation for all user-facing commands (`pkg/validation/`)
+- [x] Robust error handling throughout the codebase (`pkg/errors/` + Phases 1-4)
+- [x] Unit tests for core components — 53+ test files, all 20 packages green
+- [x] Configurable logging system with verbosity levels (`pkg/utils/logger.go`)
+- [x] Signal handling for graceful shutdown (issue #11)
+- [x] Database migration system (`internal/storage/migrations/`)
+- [x] CVSS 4.0 fields in finding model (migration 006)
+- [x] SARIF v2.1.0 report support (`internal/report/sarif.go`)
+- [x] GitHub issue integration (`internal/report/github.go`)
+- [x] Gitleaks scanner integration (`internal/recon/scanner_gitleaks.go`)
+- [x] Trivy scanner integration (`internal/recon/scanner_trivy.go`)
+- [x] Immunefi platform integration (`internal/platform/immunefi.go`)
+- [x] Bulk storage operations with partial failure handling (`internal/storage/bulk.go`, issue #14)
+- [x] SSRF protection in scan service (`internal/scan/service.go`)
+- [x] Domain-boundary scope check (PR #16, T0-2)
+- [x] Pagination for platform API calls (issue #9)
+- [x] Test coverage for config Save (issue #12) and version command (issue #13)
 
-### Storage & Database
+## Pre-v0.1.0 baseline
 
-- [ ] Implement database migration system for schema updates
-- [ ] Add support for alternative database backends (PostgreSQL, MySQL)
-- [ ] Create backup and restore functionality
-- [ ] Optimize database queries for large projects
-- [ ] Implement data retention policies and cleanup
-
-## Medium Priority Tasks
-
-### User Interface
-
-- [ ] Add dark mode to web interface
-- [ ] Create interactive dashboard with project statistics
-- [ ] Implement real-time updates for scan progress
-- [ ] Add user preference storage
-- [ ] Improve mobile responsiveness
-
-### Scanning Capabilities
-
-- [ ] Add support for custom scanning modules
-- [ ] Implement scan scheduling functionality
-- [ ] Add pause/resume capability for long-running scans
-- [ ] Create scan configuration profiles for different testing scenarios
-- [ ] Implement comparison between scan results over time
-
-### Authentication & Authorization
-
-- [ ] Add multi-user support with role-based access control
-- [ ] Implement secure authentication system
-- [ ] Add session management functionality
-- [ ] Create audit logging for security-related actions
-- [ ] Add two-factor authentication support
-
-## Low Priority Tasks
-
-### Performance Optimization
-
-- [ ] Profile application performance bottlenecks
-- [ ] Optimize memory usage for large projects
-- [ ] Implement caching for frequently accessed data
-- [ ] Add parallel processing options for reconnaissance tasks
-- [ ] Improve startup time
-
-### Documentation & Learning Resources
-
-- [ ] Create video tutorials for common workflows
-- [ ] Expand API documentation
-- [ ] Add example projects for new users
-- [ ] Create a comprehensive wiki with usage examples
-- [ ] Implement contextual help in the web interface
-
-### Integration & Plugins
-
-- [ ] Create plugin system for extending functionality
-- [ ] Add Slack/Discord integration for notifications
-- [ ] Implement integration with CI/CD systems
-- [ ] Add JIRA/GitHub issue tracker integration
-- [ ] Create REST API for programmatic access
-
-## Technical Debt
-
-- [ ] Refactor code to improve maintainability
-- [ ] Standardize error handling patterns
-- [ ] Fix known bugs (see GitHub issues)
-- [ ] Address deprecated dependency usage
-- [ ] Improve code comments and documentation
-
-## Future Considerations
-
-### Research Areas
-
-- [ ] Explore machine learning applications for vulnerability prediction
-- [ ] Research automated exploit generation for verified vulnerabilities
-- [ ] Investigate collaborative scanning techniques
-- [ ] Explore integration with threat intelligence platforms
-- [ ] Research privacy-preserving vulnerability sharing methods
-
-### Community Building
-
-- [ ] Create contributor guidelines
-- [ ] Implement feature request voting system
-- [ ] Set up community forum or discussion platform
-- [ ] Establish bug bounty program for ZeroDayBuddy itself
-- [ ] Create developer grants program for significant contributions
-
-## Completed Tasks
-
-- [x] Implement basic project management functionality
-- [x] Create storage interface and SQLite implementation
-- [x] Implement report generation system for findings and projects
-- [x] Add command-line interface for core functions
-- [x] Implement basic web server functionality
+- [x] Basic project management functionality
+- [x] Storage interface and SQLite implementation
+- [x] Report generation system for findings and projects
+- [x] CLI for core functions
+- [x] Basic web server scaffold
 
 ## Contributing
 
-If you're interested in working on any of these tasks, please see the CONTRIBUTING.md file for guidelines on how to contribute to the project. Before starting work on any task, please check the GitHub issues to see if someone else is already working on it, or create a new issue to indicate your intention to work on it.
+See `CONTRIBUTING.md` for contribution guidelines. Before starting work on any item from the punch list, check the GitHub issues to see if someone else is already working on it, or open an issue to claim it.
 
-The ZeroDayBuddy team welcomes contributions from developers of all skill levels. Don't hesitate to get involved even if you're new to Go or security tools development!
+The ZeroDayBuddy team welcomes contributions from developers of all skill levels. Don't hesitate to get involved even if you're new to Go or security tools development.
