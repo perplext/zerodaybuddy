@@ -251,8 +251,8 @@ func validateDirectory(dir string, name string, createIfMissing bool) error {
 	if os.IsNotExist(err) {
 		if createIfMissing {
 			// Try to create it
-			if err := os.MkdirAll(cleaned, 0755); err != nil {
-				return fmt.Errorf("failed to create %s directory: %w", name, err)
+			if mkdirErr := os.MkdirAll(cleaned, 0755); mkdirErr != nil {
+				return fmt.Errorf("failed to create %s directory: %w", name, mkdirErr)
 			}
 		} else {
 			return fmt.Errorf("%s directory does not exist: %s", name, cleaned)

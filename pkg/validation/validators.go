@@ -23,9 +23,6 @@ var (
 	// Username validation
 	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 	
-	// API key patterns
-	hackeroneAPIKeyRegex = regexp.MustCompile(`^[a-zA-Z0-9]{40,}$`)
-	
 	// Migration name pattern
 	migrationNameRegex = regexp.MustCompile(`^[a-z0-9_]+$`)
 )

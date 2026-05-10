@@ -53,8 +53,8 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 	// Create retryable function
 	fn := func(ctx context.Context) error {
 		// Apply rate limiting
-		if err := c.rateLimiter.Wait(ctx, c.service); err != nil {
-			return fmt.Errorf("rate limit wait failed: %w", err)
+		if waitErr := c.rateLimiter.Wait(ctx, c.service); waitErr != nil {
+			return fmt.Errorf("rate limit wait failed: %w", waitErr)
 		}
 		
 		// Log the request

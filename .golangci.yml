@@ -17,6 +17,9 @@ linters-settings:
     enable-all: true
     disable:
       - fieldalignment
+      # unusedwrite is noisy on test fixtures (struct literals set all fields
+      # for shape documentation even when the test only asserts on a subset).
+      - unusedwrite
   staticcheck:
     checks:
       - all
@@ -26,3 +29,10 @@ issues:
     - vendor
   max-issues-per-linter: 50
   max-same-issues: 5
+  exclude-rules:
+    # Test files routinely ignore error returns from setup helpers, mocks,
+    # response-writer.Write/Encode in test HTTP handlers, and deferred Close/Shutdown.
+    # Production code is still subject to errcheck.
+    - path: _test\.go$
+      linters:
+        - errcheck

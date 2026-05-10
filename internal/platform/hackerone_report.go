@@ -28,8 +28,8 @@ func (h *HackerOne) SubmitReport(ctx context.Context, programHandle string, find
 	}
 
 	// Step 2: Update the intent with report details
-	if err := h.updateReportIntent(ctx, intentID, finding); err != nil {
-		return "", fmt.Errorf("failed to update report intent: %w", err)
+	if updateErr := h.updateReportIntent(ctx, intentID, finding); updateErr != nil {
+		return "", fmt.Errorf("failed to update report intent: %w", updateErr)
 	}
 
 	// Step 3: Submit the report intent

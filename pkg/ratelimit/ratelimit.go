@@ -145,7 +145,7 @@ func (rl *RateLimiter) getLimiter(service string) *serviceRateLimiter {
 	defer rl.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if limiter, exists := rl.limiters[service]; exists {
+	if limiter, found := rl.limiters[service]; found {
 		limiter.lastAccessed = time.Now()
 		return limiter
 	}

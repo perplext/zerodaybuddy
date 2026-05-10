@@ -104,12 +104,12 @@ func createMigrateStatusCommand(app *core.App) *cobra.Command {
 			defer db.Close()
 
 			migrator := migrations.NewMigrator(db)
-			
+
 			// Initialize migrations table if needed
-			if err := migrator.Initialize(cmd.Context()); err != nil {
-				return err
+			if initErr := migrator.Initialize(cmd.Context()); initErr != nil {
+				return initErr
 			}
-			
+
 			// Get applied migrations
 			applied, err := migrator.GetAppliedMigrations(cmd.Context())
 			if err != nil {
@@ -220,7 +220,7 @@ func createMigrateCreateCommand(app *core.App) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Migration name (e.g., add_user_table)")
-	cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("name")
 	
 	return cmd
 }

@@ -361,13 +361,13 @@ func (m *Migrator) runMigration(ctx context.Context, migration MigrationFile) er
 	if err != nil {
 		return pkgerrors.InternalError("failed to begin transaction", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // best-effort; returns sql.ErrTxDone after Commit
 	
 	start := time.Now()
 	
 	// Execute migration
-	if _, err := tx.ExecContext(ctx, migration.UpSQL); err != nil {
-		return pkgerrors.InternalError("failed to execute migration", err).
+	if _, execErr := tx.ExecContext(ctx, migration.UpSQL); execErr != nil {
+		return pkgerrors.InternalError("failed to execute migration", execErr).
 			WithContext("sql", migration.UpSQL)
 	}
 	
@@ -406,7 +406,7 @@ func (m *Migrator) rollbackMigration(ctx context.Context, migration MigrationFil
 	if err != nil {
 		return pkgerrors.InternalError("failed to begin transaction", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // best-effort; returns sql.ErrTxDone after Commit
 	
 	// Execute rollback
 	if _, err := tx.ExecContext(ctx, migration.DownSQL); err != nil {

@@ -103,21 +103,23 @@ func WrapCommandError(err error, command string, args map[string]interface{}) er
 		return nil
 	}
 	
-	// If it's already a ZeroDayBuddy error, add command context
+	// If it's already a ZeroDayBuddy error, add command context.
+	// WithContext mutates the receiver and returns *ZeroDayBuddyError for chaining;
+	// we discard the return because we already hold the pointer.
 	if zerodaybuddyErr, ok := err.(*pkgerrors.ZeroDayBuddyError); ok {
-		zerodaybuddyErr.WithContext("command", command)
+		_ = zerodaybuddyErr.WithContext("command", command)
 		for k, v := range args {
-			zerodaybuddyErr.WithContext(k, v)
+			_ = zerodaybuddyErr.WithContext(k, v)
 		}
 		return zerodaybuddyErr
 	}
-	
+
 	// Otherwise, wrap it as an internal error
 	wrapped := pkgerrors.InternalError(fmt.Sprintf("command '%s' failed", command), err)
-	wrapped.WithContext("command", command)
+	_ = wrapped.WithContext("command", command)
 	for k, v := range args {
-		wrapped.WithContext(k, v)
+		_ = wrapped.WithContext(k, v)
 	}
-	
+
 	return wrapped
 }

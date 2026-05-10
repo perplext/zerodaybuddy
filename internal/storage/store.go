@@ -597,17 +597,6 @@ func isUniqueConstraintError(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-// isForeignKeyConstraintError checks if an error is a foreign key constraint violation
-func isForeignKeyConstraintError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// SQLite returns "FOREIGN KEY constraint failed" in error message
-	return strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
-}
-
-// For the sake of example, I'll implement one more method to show the pattern
-
 // GetEndpoint retrieves an endpoint by ID
 func (s *SQLiteStore) GetEndpoint(ctx context.Context, id string) (*models.Endpoint, error) {
 	var endpoint models.Endpoint

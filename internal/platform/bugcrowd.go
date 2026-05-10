@@ -216,10 +216,10 @@ func (b *Bugcrowd) GetProgram(ctx context.Context, handle string) (*models.Progr
 		} `json:"program"`
 	}
 	
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&response); decodeErr != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", decodeErr)
 	}
-	
+
 	// Fetch scope
 	scope, err := b.FetchScope(ctx, handle)
 	if err != nil {

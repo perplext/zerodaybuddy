@@ -223,10 +223,10 @@ func (h *HackerOne) GetProgram(ctx context.Context, handle string) (*models.Prog
 		} `json:"data"`
 	}
 	
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&response); decodeErr != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", decodeErr)
 	}
-	
+
 	createdAt, _ := time.Parse(time.RFC3339, response.Data.Attributes.CreatedAt)
 	updatedAt, _ := time.Parse(time.RFC3339, response.Data.Attributes.UpdatedAt)
 	

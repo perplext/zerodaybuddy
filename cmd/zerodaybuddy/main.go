@@ -138,8 +138,9 @@ func createProjectCreateCommand(app *core.App) *cobra.Command {
 
 	cmd.Flags().StringVarP(&platform, "platform", "p", "", "Bug bounty platform (hackerone, bugcrowd)")
 	cmd.Flags().StringVarP(&program, "program", "n", "", "Program name or handle")
-	cmd.MarkFlagRequired("platform")
-	cmd.MarkFlagRequired("program")
+	// MarkFlagRequired only fails on undeclared flag names (programmer error); discard explicitly.
+	_ = cmd.MarkFlagRequired("platform")
+	_ = cmd.MarkFlagRequired("program")
 	
 	return cmd
 }
@@ -191,7 +192,7 @@ func createReconRunCommand(app *core.App) *cobra.Command {
 
 	cmd.Flags().StringVarP(&project, "project", "p", "", "Project name")
 	cmd.Flags().IntVarP(&concurrent, "concurrent", "c", 10, "Maximum concurrent tasks")
-	cmd.MarkFlagRequired("project")
+	_ = cmd.MarkFlagRequired("project")
 	
 	return cmd
 }
@@ -240,7 +241,7 @@ func createScanRunCommand(app *core.App) *cobra.Command {
 	cmd.Flags().StringVarP(&project, "project", "p", "", "Project name")
 	cmd.Flags().StringVarP(&target, "target", "t", "", "Target URL or asset (optional, scans all if not specified)")
 	cmd.Flags().IntVarP(&concurrent, "concurrent", "c", 5, "Maximum concurrent tasks")
-	cmd.MarkFlagRequired("project")
+	_ = cmd.MarkFlagRequired("project")
 	
 	return cmd
 }
@@ -293,7 +294,7 @@ func createReportGenerateCommand(app *core.App) *cobra.Command {
 	cmd.Flags().StringVarP(&finding, "finding", "f", "", "Finding ID (optional, generates report for all findings if not specified)")
 	cmd.Flags().StringVarP(&format, "format", "m", "markdown", "Report format (markdown, pdf)")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file (optional, outputs to stdout if not specified)")
-	cmd.MarkFlagRequired("project")
+	_ = cmd.MarkFlagRequired("project")
 	
 	return cmd
 }

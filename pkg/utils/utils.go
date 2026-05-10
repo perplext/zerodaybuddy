@@ -3,7 +3,6 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -42,12 +41,12 @@ func WriteFile(path string, data []byte) error {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 	
-	return ioutil.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
 // ReadFile reads data from a file
 func ReadFile(path string) ([]byte, error) {
-	return ioutil.ReadFile(path)
+	return os.ReadFile(path)
 }
 
 // IsValidURL checks if a string is a valid HTTP/HTTPS URL

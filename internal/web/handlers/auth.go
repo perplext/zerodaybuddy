@@ -173,7 +173,9 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("Failed to encode refresh response: %v", err)
+	}
 }
 
 // Profile returns the current user's profile
@@ -190,7 +192,9 @@ func (h *AuthHandler) Profile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		h.logger.Error("Failed to encode profile response: %v", err)
+	}
 }
 
 // ChangePassword handles password change requests
@@ -232,7 +236,9 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully"}); err != nil {
+		h.logger.Error("Failed to encode change-password response: %v", err)
+	}
 }
 
 // validateCreateUserRequest validates user creation request

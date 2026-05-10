@@ -71,8 +71,8 @@ func (s *NaabuScanner) ScanPorts(ctx context.Context, project *models.Project, t
 	outputFile := filepath.Join(tempDir, "naabu_output.json")
 
 	// Write domains to the temporary file
-	if err := os.WriteFile(domainsFile, []byte(strings.Join(targets, "\n")), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write domains to file: %v", err)
+	if writeErr := os.WriteFile(domainsFile, []byte(strings.Join(targets, "\n")), 0644); writeErr != nil {
+		return nil, fmt.Errorf("failed to write domains to file: %v", writeErr)
 	}
 
 	// Determine which ports to scan based on options
@@ -94,12 +94,12 @@ func (s *NaabuScanner) ScanPorts(ctx context.Context, project *models.Project, t
 
 	// Execute the command
 	cmd := exec.CommandContext(ctx, naabuPath, args...)
-	if _, err := cmd.Output(); err != nil {
+	if _, cmdErr := cmd.Output(); cmdErr != nil {
 		// Check if it's an ExitError which might contain stderr
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("naabu failed: %v, stderr: %s", err, exitErr.Stderr)
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("naabu failed: %v, stderr: %s", cmdErr, exitErr.Stderr)
 		}
-		return nil, fmt.Errorf("naabu failed: %v", err)
+		return nil, fmt.Errorf("naabu failed: %v", cmdErr)
 	}
 
 	// Read and parse the output
