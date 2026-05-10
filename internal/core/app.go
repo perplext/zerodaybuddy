@@ -116,7 +116,10 @@ func (a *App) Initialize(ctx context.Context) error {
 	a.reconSvc = recon.NewService(a.store, a.config.Tools, a.logger)
 	a.scanSvc = scan.NewService(a.store, *a.config, a.logger)
 	a.reportSvc = report.NewService(a.store, a.logger)
-	a.webSvc = web.NewServer(a.config.WebServer, a.logger)
+	a.webSvc = web.NewServer(a.config.WebServer, web.Dependencies{
+		AuthService: a.authSvc,
+		StaticDir:   "web/static",
+	}, a.logger)
 	
 	a.logger.Info("ZeroDayBuddy initialized successfully")
 	

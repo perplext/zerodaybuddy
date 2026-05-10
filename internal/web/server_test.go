@@ -13,44 +13,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newTestServer constructs a Server with a nil-AuthService Dependencies struct.
+// Auth-route registration is skipped in this configuration, so tests targeting
+// /health, /, and (in U4) /static can run without an auth backend.
+func newTestServer(cfg config.WebServerConfig) *Server {
+	return NewServer(cfg, Dependencies{}, utils.NewLogger("", false))
+}
+
 func TestNewServer(t *testing.T) {
 	cfg := config.WebServerConfig{
 		Host: "localhost",
 		Port: 8080,
 	}
 	logger := utils.NewLogger("", false)
+	deps := Dependencies{}
 
-	server := NewServer(cfg, logger)
+	server := NewServer(cfg, deps, logger)
 
 	assert.NotNil(t, server)
 	assert.Equal(t, cfg, server.config)
+	assert.Equal(t, deps, server.deps)
 	assert.Equal(t, logger, server.logger)
-	assert.NotNil(t, server.services)
-	assert.Empty(t, server.services)
-}
-
-func TestServer_RegisterService(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-
-	// Register a service
-	mockService := struct{ Name string }{Name: "MockService"}
-	server.RegisterService("mock", mockService)
-
-	// Verify service was registered
-	assert.Contains(t, server.services, "mock")
-	assert.Equal(t, mockService, server.services["mock"])
-
-	// Register another service
-	anotherService := struct{ ID int }{ID: 123}
-	server.RegisterService("another", anotherService)
-
-	assert.Len(t, server.services, 2)
-	assert.Contains(t, server.services, "another")
 }
 
 func TestServer_HealthEndpoint(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
@@ -73,8 +61,8 @@ func TestServer_HealthEndpoint(t *testing.T) {
 }
 
 func TestServer_RootEndpoint(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
@@ -127,10 +115,10 @@ func TestServer_RootEndpoint(t *testing.T) {
 }
 
 func TestServer_StartAndShutdown(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
-	
+
 	// Start the server
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
@@ -153,8 +141,8 @@ func TestServer_StartAndShutdown(t *testing.T) {
 }
 
 func TestServer_TimeoutConfiguration(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
@@ -171,12 +159,12 @@ func TestServer_TimeoutConfiguration(t *testing.T) {
 }
 
 func TestServer_ConcurrentRequests(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
-	defer server.Shutdown(ctx)
+	defer func() { _ = server.Shutdown(ctx) }()
 
 	// Wait a moment for server to start
 	time.Sleep(10 * time.Millisecond)
@@ -200,51 +188,23 @@ func TestServer_ConcurrentRequests(t *testing.T) {
 }
 
 func TestServer_CustomHostAndPort(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
 	err := server.Start(ctx, "127.0.0.1", 12345)
 	require.NoError(t, err)
-	defer server.Shutdown(ctx)
+	defer func() { _ = server.Shutdown(ctx) }()
 
 	assert.Equal(t, "127.0.0.1:12345", server.server.Addr)
 }
 
-func TestServer_MultipleServiceRegistrations(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-
-	// Register multiple services
-	services := map[string]interface{}{
-		"auth":     struct{ Name string }{Name: "AuthService"},
-		"platform": struct{ Name string }{Name: "PlatformService"},
-		"recon":    struct{ Name string }{Name: "ReconService"},
-		"report":   struct{ Name string }{Name: "ReportService"},
-	}
-
-	for name, service := range services {
-		server.RegisterService(name, service)
-	}
-
-	// Verify all services are registered
-	assert.Len(t, server.services, len(services))
-	for name, expectedService := range services {
-		assert.Contains(t, server.services, name)
-		assert.Equal(t, expectedService, server.services[name])
-	}
-
-	// Overwrite a service
-	newAuthService := struct{ Version int }{Version: 2}
-	server.RegisterService("auth", newAuthService)
-	assert.Equal(t, newAuthService, server.services["auth"])
-}
-
 func TestServer_ContentTypeHeaders(t *testing.T) {
-	server := NewServer(config.WebServerConfig{}, utils.NewLogger("", false))
-	
+	server := newTestServer(config.WebServerConfig{})
+
 	ctx := context.Background()
 	err := server.Start(ctx, "localhost", 0)
 	require.NoError(t, err)
-	defer server.Shutdown(ctx)
+	defer func() { _ = server.Shutdown(ctx) }()
 
 	// Wait a moment for server to start
 	time.Sleep(10 * time.Millisecond)
@@ -254,6 +214,6 @@ func TestServer_ContentTypeHeaders(t *testing.T) {
 	w := httptest.NewRecorder()
 	server.server.Handler.ServeHTTP(w, req)
 
-	assert.Equal(t, "text/html", w.Header().Get("Content-Type"))
+	assert.Equal(t, "text/html; charset=utf-8", w.Header().Get("Content-Type"))
 	assert.Equal(t, http.StatusOK, w.Code)
 }
