@@ -69,6 +69,10 @@ jobs:
         # Pinned to last v1 — v2 is a config-format breaking change that
         # requires migrating .golangci.yml. See docs/plans/2026-05-10-002-*.
         version: v1.64.8
+        # Build golangci-lint from source using the runner's Go (1.25). The
+        # prebuilt v1.64.8 binary was compiled with Go 1.24 and v1 refuses
+        # to lint code targeting a newer Go than itself.
+        install-mode: goinstall
         args: --timeout=3m
 
   security:
