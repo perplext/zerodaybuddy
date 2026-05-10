@@ -133,11 +133,15 @@ func (s *Server) buildRouter() http.Handler {
 	// 404 semantics for /api/* and /static/* routes.
 	dashboardWired := false
 	if s.deps.Store != nil && s.deps.AuthService != nil && s.tmpl != nil && s.tmpl.Lookup("dashboard.tmpl") != nil {
-		// Dashboard goes through OptionalAuth (cookie-aware). The handler
-		// itself 303s unauth'd visitors to /login — we can't use AuthMiddleware
-		// here because it 401s with JSON, which would be an awful browser UX.
+		// Dashboard + project-detail browser pages go through OptionalAuth
+		// (cookie-aware). The handlers themselves 303 unauth'd visitors to
+		// /login — AuthMiddleware would 401 with JSON, which is awful UX
+		// for a browser navigating to a bookmarked page.
 		dashboardChain := append(s.publicChain(), middleware.OptionalAuth(s.deps.AuthService, s.logger))
 		handlers.NewDashboardHandler(s.deps.Store, s.tmpl, s.logger).RegisterRoutes(mux, dashboardChain)
+		if s.tmpl.Lookup("project_detail.tmpl") != nil {
+			handlers.NewProjectDetailHandler(s.deps.Store, s.tmpl, s.logger).RegisterRoutes(mux, dashboardChain)
+		}
 		dashboardWired = true
 	}
 	if !dashboardWired {

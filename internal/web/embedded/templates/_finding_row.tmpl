@@ -1,0 +1,18 @@
+{{/* _finding_row.tmpl — single row in the findings table.
+
+Data shape: a *models.Finding (passed via {{template "_finding_row.tmpl" .}}
+inside a {{range .Findings}} loop in project_detail.tmpl).
+
+U5 ships the read-only version: severity badge, title, status display.
+U6 will replace the static <td>{{.Status}}</td> with an HTMX-driven inline
+<select> that PATCHes /api/findings/{id} on change. The partial boundary
+exists so U6's diff is small and contained.
+*/}}
+{{define "_finding_row.tmpl"}}
+<tr data-finding-id="{{.ID}}">
+<td><span class="severity-badge {{severityClass (printf "%s" .Severity)}}">{{.Severity}}</span></td>
+<td>{{.Title}}</td>
+<td>{{.Status}}</td>
+<td>{{formatTime .FoundAt}}</td>
+</tr>
+{{end}}

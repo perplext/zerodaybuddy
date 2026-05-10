@@ -1,0 +1,115 @@
+{{/* project_detail.tmpl — per-project page.
+
+Data shape: see projectDetailData in handlers/project_detail.go.
+
+Sections (4): Hosts, Endpoints, Findings, Tasks. Each renders an empty
+state when the slice is empty; soft errors render a banner inline.
+
+Action panels (3 — per T2-3 D5): Recon, Scan, Report. All shown as
+copy-CLI commands. v1 deliberately ships zero new POST endpoints —
+users keep CLI access for actions, the dashboard surfaces the data.
+*/}}
+{{define "title"}}{{.Project.Name}} — ZeroDayBuddy{{end}}
+{{define "content"}}
+<nav aria-label="breadcrumb"><a href="/">← Projects</a></nav>
+
+<hgroup>
+<h1>{{.Project.Name}}</h1>
+<p><code>{{.Project.Handle}}</code> · {{.Project.Platform}} · <strong>{{.Project.Status}}</strong></p>
+</hgroup>
+
+{{if .Project.Description}}
+<p>{{.Project.Description}}</p>
+{{end}}
+
+<section aria-labelledby="hosts-title">
+<h2 id="hosts-title">Hosts <small>({{len .Hosts}})</small></h2>
+{{if .HostsErr}}
+<p class="banner-error">{{.HostsErr}}</p>
+{{else if .Hosts}}
+<table>
+<thead><tr><th>Value</th><th>Type</th><th>Status</th><th>Found by</th></tr></thead>
+<tbody>
+{{range .Hosts}}
+<tr><td><code>{{.Value}}</code></td><td>{{.Type}}</td><td>{{.Status}}</td><td>{{.FoundBy}}</td></tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p>No hosts discovered yet.</p>
+{{end}}
+</section>
+
+<section class="cli-panel" aria-labelledby="recon-cli-title">
+<h3 id="recon-cli-title">Run reconnaissance</h3>
+<pre><code data-clipboard>{{cliCommand "recon" "--project" $.Project.Handle}}</code></pre>
+<button type="button" data-clipboard-target="prev">Copy</button>
+</section>
+
+<section aria-labelledby="endpoints-title">
+<h2 id="endpoints-title">Endpoints <small>({{len .Endpoints}})</small></h2>
+{{if .EndpointsErr}}
+<p class="banner-error">{{.EndpointsErr}}</p>
+{{else if .Endpoints}}
+<table>
+<thead><tr><th>URL</th><th>Method</th><th>Status</th><th>Title</th></tr></thead>
+<tbody>
+{{range .Endpoints}}
+<tr><td><code>{{.URL}}</code></td><td>{{.Method}}</td><td>{{.Status}}</td><td>{{.Title}}</td></tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p>No endpoints discovered yet.</p>
+{{end}}
+</section>
+
+<section aria-labelledby="findings-title">
+<h2 id="findings-title">Findings <small>({{len .Findings}})</small></h2>
+{{if .FindingsErr}}
+<p class="banner-error">{{.FindingsErr}}</p>
+{{else if .Findings}}
+<table>
+<thead><tr><th>Severity</th><th>Title</th><th>Status</th><th>Found</th></tr></thead>
+<tbody>
+{{range .Findings}}
+{{template "_finding_row.tmpl" .}}
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p>No findings yet.</p>
+{{end}}
+</section>
+
+<section class="cli-panel" aria-labelledby="scan-cli-title">
+<h3 id="scan-cli-title">Run vulnerability scan</h3>
+<pre><code data-clipboard>{{cliCommand "scan" "--project" $.Project.Handle}}</code></pre>
+<button type="button" data-clipboard-target="prev">Copy</button>
+</section>
+
+<section aria-labelledby="tasks-title">
+<h2 id="tasks-title">Tasks <small>({{len .Tasks}})</small></h2>
+{{if .TasksErr}}
+<p class="banner-error">{{.TasksErr}}</p>
+{{else if .Tasks}}
+<table>
+<thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Progress</th></tr></thead>
+<tbody>
+{{range .Tasks}}
+<tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Status}}</td><td>{{.Progress}}%</td></tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p>No tasks recorded yet.</p>
+{{end}}
+</section>
+
+<section class="cli-panel" aria-labelledby="report-cli-title">
+<h3 id="report-cli-title">Generate report</h3>
+<pre><code data-clipboard>{{cliCommand "report" "--project" $.Project.Handle "--format" "markdown"}}</code></pre>
+<button type="button" data-clipboard-target="prev">Copy</button>
+</section>
+{{end}}
+{{template "_layout.tmpl" .}}
