@@ -37,24 +37,24 @@ table.findings-table select {
   overflow-x: auto;
 }
 
-.cli-panel button.copy {
+.cli-panel button[data-clipboard-target] {
   padding: 0.25rem 0.6rem;
   font-size: 0.8rem;
   margin-left: 0.5rem;
 }
 
-/* Triage-saved indicator (HTMX after-request flash). */
-.saved-indicator {
+/* Triage flash — set inline by zdb.js after the HTMX PATCH finishes.
+   ✓ on success, ✗ + status on failure. Stays for ~2s on success, sticks
+   on failure so the user notices. */
+.triage-flash {
   display: inline-block;
   margin-left: 0.5rem;
-  color: var(--pico-color-green-600);
   font-weight: 600;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  font-size: 0.85rem;
+  min-width: 1.5em;
 }
-.saved-indicator.visible {
-  opacity: 1;
-}
+.triage-flash-ok { color: var(--pico-color-green-600); }
+.triage-flash-err { color: var(--pico-color-red-600); }
 
 /* Generic error banner. */
 .banner-error {
