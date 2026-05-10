@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/perplext/zerodaybuddy/internal/auth"
@@ -116,7 +117,20 @@ func (a *App) Initialize(ctx context.Context) error {
 	a.reconSvc = recon.NewService(a.store, a.config.Tools, a.logger)
 	a.scanSvc = scan.NewService(a.store, *a.config, a.logger)
 	a.reportSvc = report.NewService(a.store, a.logger)
-	a.webSvc = web.NewServer(a.config.WebServer, a.logger)
+	// Resolve the static-asset directory to an absolute path so the web
+	// server's http.FileServer doesn't depend on the binary's cwd at request
+	// time. filepath.Abs is best-effort: if it fails we fall back to the
+	// relative path (preserving previous behavior) and log a warning. T2-3
+	// will likely embed assets via //go:embed and remove this resolution.
+	staticDir, absErr := filepath.Abs("web/static")
+	if absErr != nil {
+		a.logger.Warn("Failed to resolve web/static to absolute path: %v; falling back to relative", absErr)
+		staticDir = "web/static"
+	}
+	a.webSvc = web.NewServer(a.config.WebServer, web.Dependencies{
+		AuthService: a.authSvc,
+		StaticDir:   staticDir,
+	}, a.logger)
 	
 	a.logger.Info("ZeroDayBuddy initialized successfully")
 	
