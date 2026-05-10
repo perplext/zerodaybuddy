@@ -125,19 +125,31 @@ func (s *Server) buildRouter() http.Handler {
 	})
 	mux.Handle("GET /health", middleware.Chain(healthHandler, s.publicChain()...))
 
-	// Index — minimal API-documentation stub. CSP-clean (no inline JS/CSS) so
-	// the strict default-src 'self' from SecurityHeaders doesn't break it.
+	// Index — registered later by DashboardHandler when Store + AuthService +
+	// dashboard template are all available. Falls back to a minimal API-doc
+	// stub when any prerequisite is missing (test servers, no-storage mode).
 	// Registered with the {$} wildcard so it matches exactly "/" only;
 	// without {$}, "/" would be a catch-all that masks ServeMux's 405 and
 	// 404 semantics for /api/* and /static/* routes.
-	indexHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(indexHTML)); err != nil {
-			s.logger.Error("Failed to write index response: %v", err)
-		}
-	})
-	mux.Handle("GET /{$}", middleware.Chain(indexHandler, s.publicChain()...))
+	dashboardWired := false
+	if s.deps.Store != nil && s.deps.AuthService != nil && s.tmpl != nil && s.tmpl.Lookup("dashboard.tmpl") != nil {
+		// Dashboard goes through OptionalAuth (cookie-aware). The handler
+		// itself 303s unauth'd visitors to /login — we can't use AuthMiddleware
+		// here because it 401s with JSON, which would be an awful browser UX.
+		dashboardChain := append(s.publicChain(), middleware.OptionalAuth(s.deps.AuthService, s.logger))
+		handlers.NewDashboardHandler(s.deps.Store, s.tmpl, s.logger).RegisterRoutes(mux, dashboardChain)
+		dashboardWired = true
+	}
+	if !dashboardWired {
+		indexHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write([]byte(indexHTML)); err != nil {
+				s.logger.Error("Failed to write index response: %v", err)
+			}
+		})
+		mux.Handle("GET /{$}", middleware.Chain(indexHandler, s.publicChain()...))
+	}
 
 	// Static file server — backed by the embedded FS. Always registered (the
 	// embedded FS is part of the binary, not a configurable filesystem path).
