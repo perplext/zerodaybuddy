@@ -14,30 +14,53 @@ type contextKey string
 
 const userContextKey contextKey = "user"
 
+// SessionCookieName is the name of the cookie carrying the JWT for browser
+// sessions. Same JWT as the Authorization: Bearer header — different transport.
+// Browser handlers (T2-3) set this cookie at login and clear it at logout.
+const SessionCookieName = "zdb_session"
+
 // AuthService interface for authentication operations
 type AuthService interface {
 	ValidateToken(ctx context.Context, token string) (*auth.User, error)
 }
 
-// AuthMiddleware handles JWT token authentication
+// tokenFromRequest extracts a JWT from the request, looking first at the
+// Authorization: Bearer header, then falling back to the SessionCookieName
+// cookie. The Authorization header takes precedence when both are present
+// (more explicit; matches typical API-client expectations).
+//
+// Returns the raw token string and ok=true on success. Returns ok=false when
+// neither source carries a valid Bearer token.
+func tokenFromRequest(r *http.Request) (string, bool) {
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && parts[0] == "Bearer" && parts[1] != "" {
+			return parts[1], true
+		}
+		// Header was present but malformed — fall through to cookie. The
+		// alternative (rejecting outright) would surprise mixed-transport
+		// clients (e.g., a browser that has both a cookie and a stale
+		// header from a JS extension).
+	}
+	if cookie, err := r.Cookie(SessionCookieName); err == nil && cookie.Value != "" {
+		return cookie.Value, true
+	}
+	return "", false
+}
+
+// AuthMiddleware handles JWT token authentication. Accepts the JWT from
+// either the Authorization: Bearer header (API clients) or the
+// SessionCookieName cookie (browser flow). On any failure (no token,
+// invalid token, expired token), returns 401 plain-text — same shape as
+// before T2-3.
 func AuthMiddleware(authService AuthService, logger *utils.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Extract token from Authorization header
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
+			token, ok := tokenFromRequest(r)
+			if !ok {
 				http.Error(w, "Authorization header required", http.StatusUnauthorized)
 				return
 			}
-
-			// Check Bearer token format
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, "Invalid authorization header format", http.StatusUnauthorized)
-				return
-			}
-
-			token := parts[1]
 
 			// Validate token
 			user, err := authService.ValidateToken(r.Context(), token)
@@ -77,27 +100,19 @@ func RequireRole(requiredRole auth.UserRole, logger *utils.Logger) func(http.Han
 	}
 }
 
-// OptionalAuth middleware that validates token if present but doesn't require it
+// OptionalAuth validates a token if one is present (in either the
+// Authorization header or the SessionCookieName cookie) but never fails the
+// request. Used by browser routes that want to know who the user is when
+// possible but render a generic page (or 303 to /login) when not authed.
 func OptionalAuth(authService AuthService, logger *utils.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Extract token from Authorization header
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
+			token, ok := tokenFromRequest(r)
+			if !ok {
 				// No token provided, continue without authentication
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			// Check Bearer token format
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				// Invalid format, but don't fail since auth is optional
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			token := parts[1]
 
 			// Validate token
 			user, err := authService.ValidateToken(r.Context(), token)
