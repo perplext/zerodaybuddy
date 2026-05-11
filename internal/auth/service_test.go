@@ -13,8 +13,12 @@ import (
 )
 
 func setupTestDB(t *testing.T) *sqlx.DB {
-	db, err := sqlx.Connect("sqlite", ":memory:")
+	// Shared-cache URI + single-connection pool so auth.Service queries see
+	// the schema this function creates regardless of which pool connection
+	// they pull. Plain ":memory:" gives every connection its own private DB.
+	db, err := sqlx.Connect("sqlite", "file::memory:?cache=shared")
 	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
 
 	// Create tables
 	_, err = db.Exec(`
