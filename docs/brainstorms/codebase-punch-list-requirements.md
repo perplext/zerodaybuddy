@@ -139,14 +139,14 @@ Each item: **what** + **where** + **effort (S/M/L)** + **why this rank** + **dep
 - Effort: M
 - Add a `"manual"` platform type. New CLI: `zerodaybuddy project create --manual --name X --scope-file scope.{yaml,json}`.
 - `App.CreateProject` factored to accept either `(platform, programHandle)` or `(scopeDoc)`.
-- Why valuable: directly unblocks individual hackers (who can't use HackerOne org-tier API) and arbitrary security work. Addresses concerns documented in `HACKERONE_HACKER_LIMITATIONS.md` and `ZERODAYBUDDY_TEST_REPORT.md`. Materially expands the addressable user base.
+- Why valuable: directly unblocks individual hackers (who can't use HackerOne org-tier API) and arbitrary security work. Addresses concerns documented in `docs/archive/HACKERONE_HACKER_LIMITATIONS.md` and `docs/archive/ZERODAYBUDDY_TEST_REPORT.md` (both moved out of the repo root by Tier 1 hygiene). Materially expands the addressable user base.
 - Depends on: nothing structurally; benefits from T2-2 if web-based project creation is wanted.
 
 **T3-2. Scope file schema**
 - Where: new `pkg/models/scopefile.go` + example in `examples/scope.yaml`
 - Effort: S-M
-- Define a YAML/JSON schema covering: `in_scope[]`, `out_of_scope[]`, asset types (`url`, `domain`, `ip`, `cidr`, `wildcard`, `mobile-android`, `mobile-ios`, `code`, `executable`, `hardware`, `other`).
-- Aligns with HackerOne and Bugcrowd asset taxonomies (per `scratch-security-standards-research.md`).
+- Define a YAML/JSON schema covering `in_scope[]` and `out_of_scope[]`. Asset types should mirror the existing `models.AssetType` enum (current values: `domain`, `ip`, `url`, `mobile`, `binary`, `container`, `smart_contract`, `repository`, `other`). Planning may decide to widen the enum to distinguish wildcard vs exact domains, separate mobile-android from mobile-ios, add CIDR/source-code/hardware — but that decision belongs in the plan, not here, and any new variants must be added to `pkg/models/models.go` first.
+- Aligns with HackerOne and Bugcrowd asset taxonomies (per `docs/archive/scratch-security-standards-research.md`).
 - Depends on: T3-1.
 
 **T3-3. HackerOne hacker-account workflow clarification**
