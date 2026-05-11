@@ -10,20 +10,34 @@ import (
 )
 
 // findingScanDest holds the intermediate scan targets for a finding row.
+//
+// Columns that are nullable in the schema (per migrations/001_initial_schema.sql)
+// must be scanned into sql.Null* wrappers — Go's database/sql refuses to scan
+// SQL NULL into a non-pointer string/float64 and the call returns an error
+// like "converting NULL to float64 is unsupported". The bulk-import path
+// always populates these fields so the bug stays latent there; any
+// alternative ingest (web UI form, manual SQL, scope-file import) trips it.
+//
+// Nullable columns covered here: type, confidence, details, url, cwe,
+// stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON,
+// affectedAssetsJSON, cvss, impact, remediation.
 type findingScanDest struct {
 	finding                                                                    models.Finding
 	findingType, confidence, url, details, cwe                                 sql.NullString
+	impact, remediation                                                        sql.NullString
+	cvss                                                                       sql.NullFloat64
 	stepsJSON, evidenceJSON, evidenceMapJSON, metadataJSON, referencesJSON, affectedAssetsJSON sql.NullString
 }
 
 // scanArgs returns pointers in column order for use with Scan/QueryRow.
+// Order MUST match findingSelectCols below.
 func (d *findingScanDest) scanArgs() []interface{} {
 	return []interface{}{
 		&d.finding.ID, &d.finding.ProjectID, &d.findingType, &d.finding.Title, &d.finding.Description,
 		&d.details, &d.finding.Severity, &d.confidence, &d.finding.Status, &d.url,
-		&d.finding.CVSS, &d.finding.CVSSVector, &d.finding.CVSSVersion, &d.cwe,
+		&d.cvss, &d.finding.CVSSVector, &d.finding.CVSSVersion, &d.cwe,
 		&d.stepsJSON, &d.evidenceJSON, &d.evidenceMapJSON, &d.metadataJSON,
-		&d.finding.Impact, &d.finding.Remediation, &d.referencesJSON, &d.finding.FoundBy, &d.finding.FoundAt,
+		&d.impact, &d.remediation, &d.referencesJSON, &d.finding.FoundBy, &d.finding.FoundAt,
 		&d.affectedAssetsJSON, &d.finding.CreatedAt, &d.finding.UpdatedAt,
 	}
 }
@@ -50,6 +64,15 @@ func (d *findingScanDest) hydrate() (*models.Finding, error) {
 	}
 	if d.cwe.Valid {
 		f.CWE = d.cwe.String
+	}
+	if d.cvss.Valid {
+		f.CVSS = d.cvss.Float64
+	}
+	if d.impact.Valid {
+		f.Impact = d.impact.String
+	}
+	if d.remediation.Valid {
+		f.Remediation = d.remediation.String
 	}
 
 	stepsStr := d.stepsJSON.String
