@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/perplext/zerodaybuddy/internal/auth"
 	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	"github.com/perplext/zerodaybuddy/pkg/utils"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"

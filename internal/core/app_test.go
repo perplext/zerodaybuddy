@@ -62,7 +62,7 @@ func getTestConfig(t *testing.T) *config.Config {
 func TestNewApp(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	assert.NotNil(t, app)
 	assert.Equal(t, cfg, app.config)
 	assert.NotNil(t, app.logger)
@@ -73,10 +73,10 @@ func TestNewApp(t *testing.T) {
 func TestAppInitialize(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
-	
+
 	require.NoError(t, err)
 	assert.NotNil(t, app.store)
 	assert.NotNil(t, app.authSvc)
@@ -93,11 +93,11 @@ func TestAppInitializeWithoutJWTSecret(t *testing.T) {
 	cfg := getTestConfig(t)
 	cfg.WebServer.JWTSecret = ""
 	cfg.WebServer.JWTIssuer = ""
-	
+
 	app := NewApp(cfg)
 	ctx := context.Background()
 	err := app.Initialize(ctx)
-	
+
 	require.NoError(t, err)
 	assert.NotNil(t, app.authSvc)
 }
@@ -105,11 +105,11 @@ func TestAppInitializeWithoutJWTSecret(t *testing.T) {
 func TestGetAuthService(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	authSvc := app.GetAuthService()
 	assert.NotNil(t, authSvc)
 	assert.Equal(t, app.authSvc, authSvc)
@@ -118,7 +118,7 @@ func TestGetAuthService(t *testing.T) {
 func TestGetConfig(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	returnedCfg := app.GetConfig()
 	assert.Equal(t, cfg, returnedCfg)
 }
@@ -126,11 +126,11 @@ func TestGetConfig(t *testing.T) {
 func TestListProgramsUnknownPlatform(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.ListPrograms(ctx, "unknown-platform")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown platform")
@@ -139,11 +139,11 @@ func TestListProgramsUnknownPlatform(t *testing.T) {
 func TestCreateProjectUnknownPlatform(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.CreateProject(ctx, "unknown-platform", "test-handle")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown platform")
@@ -152,11 +152,11 @@ func TestCreateProjectUnknownPlatform(t *testing.T) {
 func TestListProjects(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	// Should not error even with no projects
 	err = app.ListProjects(ctx)
 	assert.NoError(t, err)
@@ -234,11 +234,11 @@ func TestCreateProjectHackerTierTokenRecommendsManual(t *testing.T) {
 func TestRunReconProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.RunRecon(ctx, "non-existent-project", 5)
 	assert.Error(t, err)
 	// The error should be wrapped as a NotFoundError
@@ -254,11 +254,11 @@ func TestRunReconProjectNotFound(t *testing.T) {
 func TestRunScanProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.RunScan(ctx, "non-existent-project", "", 5)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get project")
@@ -267,11 +267,11 @@ func TestRunScanProjectNotFound(t *testing.T) {
 func TestGenerateReportProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.GenerateReport(ctx, "non-existent-project", "", "markdown", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get project")
@@ -321,7 +321,7 @@ func TestServeWithoutInit(t *testing.T) {
 func TestRunReconWithoutInit(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	// Create a fresh store instance for this test
 	tempDir := t.TempDir()
 	store, err := storage.NewStore(tempDir)
@@ -329,7 +329,7 @@ func TestRunReconWithoutInit(t *testing.T) {
 	app.store = store
 	// Ensure services are nil
 	app.reconSvc = nil
-	
+
 	// Create a test project with unique name
 	ctx := context.Background()
 	project := &models.Project{
@@ -341,7 +341,7 @@ func TestRunReconWithoutInit(t *testing.T) {
 	}
 	err = app.store.CreateProject(ctx, project)
 	require.NoError(t, err)
-	
+
 	// Try to run recon without initializing services
 	err = app.RunRecon(ctx, "Recon Test Project", 5)
 	assert.Error(t, err)

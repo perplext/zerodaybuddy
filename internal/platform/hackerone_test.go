@@ -273,15 +273,15 @@ func TestHackerOne_ListPrograms_Pagination(t *testing.T) {
 
 func TestHackerOne_GetProgram(t *testing.T) {
 	tests := []struct {
-		name               string
-		handle             string
-		config             config.HackerOneConfig
-		mockProgramResp    interface{}
-		mockProgramStatus  int
-		mockScopeResp      interface{}
-		mockScopeStatus    int
-		expectedError      string
-		checkProgram       func(t *testing.T, program *models.Program)
+		name              string
+		handle            string
+		config            config.HackerOneConfig
+		mockProgramResp   interface{}
+		mockProgramStatus int
+		mockScopeResp     interface{}
+		mockScopeStatus   int
+		expectedError     string
+		checkProgram      func(t *testing.T, program *models.Program)
 	}{
 		{
 			name:   "successful get program",

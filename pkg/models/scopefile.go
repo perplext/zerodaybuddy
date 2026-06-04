@@ -24,12 +24,12 @@ const maxScopeFileSize = 1 << 20 // 1 MiB
 
 // Scope-file loading errors. Callers can match these with errors.Is.
 var (
-	ErrScopeFileTooLarge   = errors.New("scope file exceeds maximum allowed size")
-	ErrScopeFileEmpty      = errors.New("scope file is empty")
-	ErrScopeNoInScope      = errors.New("scope must declare at least one in-scope asset")
-	ErrScopeInvalidType    = errors.New("scope asset has an unknown type")
-	ErrScopeEmptyValue     = errors.New("scope asset has an empty value")
-	ErrScopeUnknownFormat  = errors.New("unrecognized scope file format")
+	ErrScopeFileTooLarge  = errors.New("scope file exceeds maximum allowed size")
+	ErrScopeFileEmpty     = errors.New("scope file is empty")
+	ErrScopeNoInScope     = errors.New("scope must declare at least one in-scope asset")
+	ErrScopeInvalidType   = errors.New("scope asset has an unknown type")
+	ErrScopeEmptyValue    = errors.New("scope asset has an empty value")
+	ErrScopeUnknownFormat = errors.New("unrecognized scope file format")
 )
 
 // validAssetTypes is the set of asset types accepted in a scope file. It mirrors

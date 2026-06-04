@@ -11,15 +11,15 @@ import (
 type AssetType string
 
 const (
-	AssetTypeDomain  AssetType = "domain"
-	AssetTypeIP      AssetType = "ip"
-	AssetTypeURL     AssetType = "url"
-	AssetTypeMobile  AssetType = "mobile"
-	AssetTypeBinary         AssetType = "binary"
-	AssetTypeContainer      AssetType = "container"
-	AssetTypeSmartContract  AssetType = "smart_contract"
-	AssetTypeRepository     AssetType = "repository"
-	AssetTypeOther          AssetType = "other"
+	AssetTypeDomain        AssetType = "domain"
+	AssetTypeIP            AssetType = "ip"
+	AssetTypeURL           AssetType = "url"
+	AssetTypeMobile        AssetType = "mobile"
+	AssetTypeBinary        AssetType = "binary"
+	AssetTypeContainer     AssetType = "container"
+	AssetTypeSmartContract AssetType = "smart_contract"
+	AssetTypeRepository    AssetType = "repository"
+	AssetTypeOther         AssetType = "other"
 )
 
 // ProjectType represents the type of a project
@@ -27,9 +27,9 @@ type ProjectType string
 
 const (
 	ProjectTypeBugBounty ProjectType = "bug-bounty"
-	ProjectTypeVDP       ProjectType = "vdp"        // Vulnerability Disclosure Program
-	ProjectTypeResearch  ProjectType = "research"   // Personal security research
-	ProjectTypePentest   ProjectType = "pentest"    // Client penetration testing
+	ProjectTypeVDP       ProjectType = "vdp"      // Vulnerability Disclosure Program
+	ProjectTypeResearch  ProjectType = "research" // Personal security research
+	ProjectTypePentest   ProjectType = "pentest"  // Client penetration testing
 )
 
 // ProjectStatus represents the status of a project
@@ -45,12 +45,12 @@ const (
 type FindingStatus string
 
 const (
-	FindingStatusNew        FindingStatus = "new"
-	FindingStatusConfirmed  FindingStatus = "confirmed"
-	FindingStatusDuplicate  FindingStatus = "duplicate"
+	FindingStatusNew           FindingStatus = "new"
+	FindingStatusConfirmed     FindingStatus = "confirmed"
+	FindingStatusDuplicate     FindingStatus = "duplicate"
 	FindingStatusFalsePositive FindingStatus = "false_positive"
-	FindingStatusReported   FindingStatus = "reported"
-	FindingStatusResolved   FindingStatus = "resolved"
+	FindingStatusReported      FindingStatus = "reported"
+	FindingStatusResolved      FindingStatus = "resolved"
 )
 
 // FindingSeverity represents the severity of a finding
@@ -163,21 +163,21 @@ func (s *Scope) IsInScope(assetType AssetType, value string) bool {
 
 // Host represents a discovered host
 type Host struct {
-	ID          string      `json:"id"`
-	ProjectID   string      `json:"project_id"`
-	Type        AssetType   `json:"type"`
-	Value       string      `json:"value"`
-	IP          string      `json:"ip,omitempty"`
-	Status      string      `json:"status"`
-	Title       string      `json:"title,omitempty"`
-	Technologies []string    `json:"technologies,omitempty"`
-	Ports       []int       `json:"ports,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Screenshot  string      `json:"screenshot,omitempty"`
-	Notes       string      `json:"notes,omitempty"`
-	FoundBy     string      `json:"found_by"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID           string            `json:"id"`
+	ProjectID    string            `json:"project_id"`
+	Type         AssetType         `json:"type"`
+	Value        string            `json:"value"`
+	IP           string            `json:"ip,omitempty"`
+	Status       string            `json:"status"`
+	Title        string            `json:"title,omitempty"`
+	Technologies []string          `json:"technologies,omitempty"`
+	Ports        []int             `json:"ports,omitempty"`
+	Headers      map[string]string `json:"headers,omitempty"`
+	Screenshot   string            `json:"screenshot,omitempty"`
+	Notes        string            `json:"notes,omitempty"`
+	FoundBy      string            `json:"found_by"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
 }
 
 // Endpoint represents a discovered URL endpoint
@@ -199,21 +199,21 @@ type Endpoint struct {
 
 // Parameter represents a URL or form parameter
 type Parameter struct {
-	Name        string      `json:"name"`
-	Value       string      `json:"value,omitempty"`
-	Type        string      `json:"type,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Interesting bool        `json:"interesting"`
+	Name        string `json:"name"`
+	Value       string `json:"value,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+	Interesting bool   `json:"interesting"`
 }
 
 // FindingType represents the type of finding
 type FindingType string
 
 const (
-	FindingTypeVulnerability FindingType = "vulnerability"
-	FindingTypeExposure      FindingType = "exposure"
+	FindingTypeVulnerability    FindingType = "vulnerability"
+	FindingTypeExposure         FindingType = "exposure"
 	FindingTypeMisconfiguration FindingType = "misconfiguration"
-	FindingTypeInformation   FindingType = "information"
+	FindingTypeInformation      FindingType = "information"
 )
 
 // FindingConfidence represents the confidence level of a finding
@@ -227,51 +227,51 @@ const (
 
 // Finding represents a vulnerability finding
 type Finding struct {
-	ID          string         `json:"id"`
-	ProjectID   string         `json:"project_id"`
-	Type        FindingType    `json:"type"`
-	Title       string         `json:"title"`
-	Description string         `json:"description"`
-	Details     string         `json:"details"`
-	Severity    FindingSeverity `json:"severity"`
-	Confidence  FindingConfidence `json:"confidence"`
-	Status      FindingStatus  `json:"status"`
-	URL         string         `json:"url,omitempty"`
-	CVSS        float64        `json:"cvss,omitempty"`
-	CVSSVector  string         `json:"cvss_vector,omitempty"`
-	CVSSVersion string         `json:"cvss_version,omitempty"` // "3.1" or "4.0"
-	CWE         string         `json:"cwe,omitempty"`
-	Steps       []string       `json:"steps"`
-	Evidence    interface{}    `json:"evidence"` // Can be []Evidence or map[string]interface{}
-	Metadata    interface{}    `json:"metadata,omitempty"` // Additional metadata
-	Impact      string         `json:"impact"`
-	Remediation string         `json:"remediation"`
-	References  []string       `json:"references"`
-	FoundBy     string         `json:"found_by"`
-	FoundAt     time.Time      `json:"found_at"`
-	AffectedAssets []string    `json:"affected_assets"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID             string            `json:"id"`
+	ProjectID      string            `json:"project_id"`
+	Type           FindingType       `json:"type"`
+	Title          string            `json:"title"`
+	Description    string            `json:"description"`
+	Details        string            `json:"details"`
+	Severity       FindingSeverity   `json:"severity"`
+	Confidence     FindingConfidence `json:"confidence"`
+	Status         FindingStatus     `json:"status"`
+	URL            string            `json:"url,omitempty"`
+	CVSS           float64           `json:"cvss,omitempty"`
+	CVSSVector     string            `json:"cvss_vector,omitempty"`
+	CVSSVersion    string            `json:"cvss_version,omitempty"` // "3.1" or "4.0"
+	CWE            string            `json:"cwe,omitempty"`
+	Steps          []string          `json:"steps"`
+	Evidence       interface{}       `json:"evidence"`           // Can be []Evidence or map[string]interface{}
+	Metadata       interface{}       `json:"metadata,omitempty"` // Additional metadata
+	Impact         string            `json:"impact"`
+	Remediation    string            `json:"remediation"`
+	References     []string          `json:"references"`
+	FoundBy        string            `json:"found_by"`
+	FoundAt        time.Time         `json:"found_at"`
+	AffectedAssets []string          `json:"affected_assets"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
 // Evidence represents evidence for a finding
 type Evidence struct {
-	Type        string      `json:"type"`
-	Data        string      `json:"data"`
-	Description string      `json:"description,omitempty"`
+	Type        string `json:"type"`
+	Data        string `json:"data"`
+	Description string `json:"description,omitempty"`
 }
 
 // Report represents a generated report
 type Report struct {
-	ID          string                 `json:"id"`
-	ProjectID   string                 `json:"project_id"`
-	FindingID   string                 `json:"finding_id,omitempty"`
-	Title       string                 `json:"title"`
-	Format      string                 `json:"format"`
-	Content     string                 `json:"content"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
+	ID        string                 `json:"id"`
+	ProjectID string                 `json:"project_id"`
+	FindingID string                 `json:"finding_id,omitempty"`
+	Title     string                 `json:"title"`
+	Format    string                 `json:"format"`
+	Content   string                 `json:"content"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt time.Time              `json:"created_at"`
+	UpdatedAt time.Time              `json:"updated_at"`
 }
 
 // Task represents a background task
