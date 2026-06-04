@@ -473,3 +473,8 @@ func (a *App) Serve(ctx context.Context, host string, port int) error {
 func (a *App) GetConfig() *config.Config {
 	return a.config
 }
+
+// GetStore returns the storage layer. It is nil until Initialize has run.
+func (a *App) GetStore() storage.Store {
+	return a.store
+}
