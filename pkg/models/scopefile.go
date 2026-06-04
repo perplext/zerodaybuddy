@@ -9,8 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/perplext/zerodaybuddy/pkg/utils"
 	"gopkg.in/yaml.v3"
 )
+
+// PlatformManual is the platform value for manually-created projects (no
+// bug-bounty platform API behind them).
+const PlatformManual = "manual"
 
 // maxScopeFileSize caps how large a scope file may be before parsing. It guards
 // against accidental huge files and against YAML alias-expansion ("billion
@@ -90,6 +95,34 @@ func allowedAssetTypesList() string {
 		string(AssetTypeMobile), string(AssetTypeBinary), string(AssetTypeContainer),
 		string(AssetTypeSmartContract), string(AssetTypeRepository), string(AssetTypeOther),
 	}, ", ")
+}
+
+// NewManualProject builds a Project for manual (non-platform) mode from a scope.
+// It is the single construction point shared by the CLI (App.CreateManualProject)
+// and the web create handler, so manual-mode defaults — research type, active
+// status, handle-from-name, manual platform — cannot drift between the two
+// surfaces. The scope is validated; an invalid scope returns an error and no
+// project. Name validation is the caller's responsibility (CLI/web validate it
+// against pkg/validation before constructing).
+func NewManualProject(name, handle string, projectType ProjectType, scope Scope) (*Project, error) {
+	if err := ValidateScope(&scope); err != nil {
+		return nil, err
+	}
+	if projectType == "" {
+		projectType = ProjectTypeResearch
+	}
+	if strings.TrimSpace(handle) == "" {
+		handle = name
+	}
+	return &Project{
+		Name:      name,
+		Handle:    handle,
+		Platform:  PlatformManual,
+		Type:      projectType,
+		StartDate: utils.CurrentTime(),
+		Status:    ProjectStatusActive,
+		Scope:     scope,
+	}, nil
 }
 
 // LoadScopeFile reads, parses, and validates a scope file at path. The format is

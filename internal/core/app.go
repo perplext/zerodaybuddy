@@ -230,6 +230,34 @@ func (a *App) CreateProject(ctx context.Context, platformName, programHandle str
 	return nil
 }
 
+// CreateManualProject creates a project from a hand-authored scope rather than a
+// platform fetch. It is the manual-mode counterpart to CreateProject and shares
+// the construction/defaulting logic with the web create handler via
+// models.NewManualProject, so the two surfaces cannot drift.
+func (a *App) CreateManualProject(ctx context.Context, name, handle string, projectType models.ProjectType, scope models.Scope) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+
+	project, err := models.NewManualProject(name, handle, projectType, scope)
+	if err != nil {
+		return pkgerrors.ValidationError("invalid scope: %s", err.Error()).
+			WithContext("project", name)
+	}
+
+	a.logger.Info("Creating manual project %s", name)
+	if err := a.store.CreateProject(ctx, project); err != nil {
+		// Error is already wrapped by storage layer
+		return err
+	}
+
+	fmt.Printf("Created manual project %s (%s)\n", project.Name, project.Handle)
+	fmt.Printf("Scope: %d in-scope targets, %d out-of-scope targets\n",
+		len(project.Scope.InScope), len(project.Scope.OutOfScope))
+
+	return nil
+}
+
 // ListProjects lists all bug bounty projects
 func (a *App) ListProjects(ctx context.Context) error {
 	if err := a.ensureInitialized(ctx); err != nil {

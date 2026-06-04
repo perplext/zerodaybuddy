@@ -146,6 +146,60 @@ func TestListProjects(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestCreateManualProject(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+
+	scope := models.Scope{
+		InScope: []models.Asset{
+			{Type: models.AssetTypeDomain, Value: "example.com"},
+			{Type: models.AssetTypeDomain, Value: "*.example.com"},
+		},
+	}
+
+	err := app.CreateManualProject(ctx, "manual-target", "", "", scope)
+	require.NoError(t, err)
+
+	// Persisted with manual-mode defaults.
+	project, err := app.store.GetProjectByName(ctx, "manual-target")
+	require.NoError(t, err)
+	assert.Equal(t, models.PlatformManual, project.Platform)
+	assert.Equal(t, models.ProjectTypeResearch, project.Type, "manual default type is research")
+	assert.Equal(t, models.ProjectStatusActive, project.Status)
+	assert.Equal(t, "manual-target", project.Handle, "handle derived from name")
+	assert.Len(t, project.Scope.InScope, 2)
+}
+
+func TestCreateManualProjectInvalidScopeRejected(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+
+	// Unknown asset type must be rejected and nothing persisted.
+	bad := models.Scope{InScope: []models.Asset{{Type: models.AssetType("web"), Value: "x"}}}
+	err := app.CreateManualProject(ctx, "bad-scope", "", "", bad)
+	require.Error(t, err)
+
+	_, err = app.store.GetProjectByName(ctx, "bad-scope")
+	assert.Error(t, err, "no project should be persisted on validation failure")
+}
+
+func TestCreateManualProjectEmptyInScopeRejected(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+
+	err := app.CreateManualProject(ctx, "empty-scope", "", "", models.Scope{})
+	require.Error(t, err)
+}
+
 func TestRunReconProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
