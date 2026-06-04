@@ -72,6 +72,26 @@ Run the application:
 
 Available commands: init, list-programs, project, recon, scan, report, serve, version, migrate
 
+### Manual project mode
+
+Projects can be created without a bug-bounty platform API, from a hand-authored
+scope file (for individual hackers, pentests, or arbitrary research):
+
+```bash
+zerodaybuddy project create --manual --name my-target --scope-file scope.yaml
+```
+
+The scope file is YAML or JSON with `in_scope[]` / `out_of_scope[]` arrays; each
+asset's `type` must be one of the `models.AssetType` values (domain, ip, url,
+mobile, binary, container, smart_contract, repository, other). Wildcards
+(`*.example.com`) and CIDR ranges (`10.0.0.0/8`) live in the asset `value`, not a
+separate type. See `examples/scope.yaml`. Loading/validation lives in
+`pkg/models/scopefile.go` (`LoadScopeFile` / `ValidateScope`), shared by the CLI
+and the web `POST /api/projects` handler via `models.NewManualProject`. Manual
+mode requires a non-empty `in_scope`. Internal/RFC-1918 ranges are allowed in
+scope; the scan service's SSRF filter remains the enforcement boundary for what
+is actually reachable.
+
 ## Configuration
 
 - Config file: `~/.zerodaybuddy/config.yaml`

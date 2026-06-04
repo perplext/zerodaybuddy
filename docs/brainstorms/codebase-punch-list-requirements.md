@@ -132,6 +132,8 @@ Each item: **what** + **where** + **effort (S/M/L)** + **why this rank** + **dep
 - Inspect what templates are currently in `web/templates/` and align with what handlers need.
 - Depends on: T2-1.
 
+> **Status (2026-06-03):** Tier 3 implemented on branch `feat/tier-3-surface-expansion` — manual project mode (CLI + web), scope file schema/loader (`pkg/models/scopefile.go`, `examples/scope.{yaml,json}`), and HackerOne hacker-tier 401 clarification. Plan: `docs/plans/2026-06-03-001-feat-tier-3-surface-expansion-plan.md`.
+
 ### Tier 3 — Surface expansion (new capability; addresses real-user blockers)
 
 **T3-1. Manual project mode**

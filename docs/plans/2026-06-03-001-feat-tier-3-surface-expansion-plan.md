@@ -3,7 +3,7 @@ title: "feat: Tier 3 surface expansion — manual project mode, scope file schem
 date: 2026-06-03
 type: feat
 depth: standard
-status: active
+status: completed
 origin: docs/brainstorms/codebase-punch-list-requirements.md
 related_units: U1, U2, U3, U4, U5
 deepened: 2026-06-03
