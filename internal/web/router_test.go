@@ -23,8 +23,16 @@ import (
 func setupAuthBackend(t *testing.T) *auth.Service {
 	t.Helper()
 
-	db, err := sqlx.Connect("sqlite", ":memory:")
+	// Plain ":memory:" gives every pool connection its own private DB, so
+	// schema bootstrap on conn A is invisible to auth.Service queries on
+	// conn B. Shared-cache URI + single-connection pool sidesteps both.
+	// (Same fix CodeRabbit had us apply on the cookie+browser-auth tests
+	// in PR #21; the pre-existing call sites kept working by luck of the
+	// connection pool reusing one connection — one timing change away
+	// from intermittent failure.)
+	db, err := sqlx.Connect("sqlite", "file::memory:?cache=shared")
 	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
 
 	_, err = db.Exec(`
