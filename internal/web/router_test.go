@@ -445,10 +445,16 @@ func TestRouter_FullProjectLifecycle(t *testing.T) {
 	userToken := loginAs(t, authSvc, store, "alice", "ValidPass123!", auth.RoleUser)
 	adminToken := loginAs(t, authSvc, store, "admintest", "ValidPass123!", auth.RoleAdmin)
 
-	// User creates a project
+	// User creates a manual project (manual mode requires a non-empty scope,
+	// which also exercises scope round-tripping through SQLite).
 	createBody, _ := json.Marshal(map[string]any{
 		"name":     "lifecycle-test",
 		"platform": "manual",
+		"scope": map[string]any{
+			"in_scope": []map[string]any{
+				{"type": "domain", "value": "example.com"},
+			},
+		},
 	})
 	w := doRequest(t, srv, http.MethodPost, "/api/projects", createBody, map[string]string{
 		"Authorization": "Bearer " + userToken,

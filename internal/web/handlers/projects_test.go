@@ -187,7 +187,7 @@ func TestProjectsCreate_HappyPath(t *testing.T) {
 
 	body := mustJSON(t, map[string]any{
 		"name":     "test-project",
-		"platform": "manual",
+		"platform": "hackerone", // non-manual: exercises the bug-bounty default path
 	})
 	w := httptest.NewRecorder()
 	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleUser)))
@@ -208,7 +208,7 @@ func TestProjectsCreate_DefaultsApplied(t *testing.T) {
 	body := mustJSON(t, map[string]any{
 		"name":     "p1",
 		"handle":   "p1",
-		"platform": "manual",
+		"platform": "hackerone", // non-manual: explicit type/status override path
 		"type":     "vdp",
 		"status":   "archived",
 	})
@@ -224,7 +224,7 @@ func TestProjectsCreate_DefaultsApplied(t *testing.T) {
 
 func TestProjectsCreate_AsAdminAllowed(t *testing.T) {
 	h := newProjectsHandlerWithFake(newFakeStore())
-	body := mustJSON(t, map[string]any{"name": "admincreate", "platform": "manual"})
+	body := mustJSON(t, map[string]any{"name": "admincreate", "platform": "hackerone"})
 	w := httptest.NewRecorder()
 	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleAdmin)))
 
@@ -302,7 +302,7 @@ func TestProjectsCreate_ClientCannotSmuggleServerSetFields(t *testing.T) {
 
 	body := mustJSON(t, map[string]any{
 		"name":       "clean",
-		"platform":   "manual",
+		"platform":   "hackerone",
 		"id":         "client-supplied-id",
 		"created_at": "1970-01-01T00:00:00Z",
 	})
@@ -314,6 +314,102 @@ func TestProjectsCreate_ClientCannotSmuggleServerSetFields(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.NotEqual(t, "client-supplied-id", got.ID,
 		"client-supplied id MUST NOT propagate; the storage layer assigns one")
+}
+
+// -- CREATE: manual mode / scope validation (U4) --
+
+func validScopeBody(name, platform string) map[string]any {
+	return map[string]any{
+		"name":     name,
+		"platform": platform,
+		"scope": map[string]any{
+			"in_scope": []map[string]any{
+				{"type": "domain", "value": "example.com"},
+				{"type": "domain", "value": "*.example.com"},
+			},
+		},
+	}
+}
+
+func TestProjectsCreate_ManualHappyPath(t *testing.T) {
+	h := newProjectsHandlerWithFake(newFakeStore())
+	body := mustJSON(t, validScopeBody("manual-web", "manual"))
+	w := httptest.NewRecorder()
+	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleUser)))
+
+	require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+	var got models.Project
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, models.PlatformManual, got.Platform)
+	assert.Equal(t, models.ProjectTypeResearch, got.Type, "manual default type is research, not bug-bounty")
+	assert.Len(t, got.Scope.InScope, 2)
+}
+
+// TestProjectsCreate_ManualMatchesCLIDefault locks the CLI/web parity the plan
+// requires: a manual project created via the web gets the same default Type the
+// CLI helper assigns (research), because both route through NewManualProject.
+func TestProjectsCreate_ManualMatchesCLIDefault(t *testing.T) {
+	h := newProjectsHandlerWithFake(newFakeStore())
+	body := mustJSON(t, validScopeBody("parity", "manual"))
+	w := httptest.NewRecorder()
+	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleUser)))
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	cliProject, err := models.NewManualProject("parity", "", "", models.Scope{
+		InScope: []models.Asset{{Type: models.AssetTypeDomain, Value: "example.com"}},
+	})
+	require.NoError(t, err)
+
+	var webProject models.Project
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &webProject))
+	assert.Equal(t, cliProject.Type, webProject.Type, "web and CLI manual defaults must match")
+	assert.Equal(t, cliProject.Platform, webProject.Platform)
+}
+
+func TestProjectsCreate_ManualInvalidScopeType_400(t *testing.T) {
+	h := newProjectsHandlerWithFake(newFakeStore())
+	body := mustJSON(t, map[string]any{
+		"name":     "bad-scope",
+		"platform": "manual",
+		"scope": map[string]any{
+			"in_scope": []map[string]any{{"type": "web", "value": "example.com"}},
+		},
+	})
+	w := httptest.NewRecorder()
+	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleUser)))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assertErrorCode(t, w, ErrCodeInvalidField)
+}
+
+func TestProjectsCreate_ManualEmptyScope_400(t *testing.T) {
+	h := newProjectsHandlerWithFake(newFakeStore())
+	body := mustJSON(t, map[string]any{"name": "no-scope", "platform": "manual"})
+	w := httptest.NewRecorder()
+	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleUser)))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assertErrorCode(t, w, ErrCodeInvalidField)
+}
+
+// TestProjectsCreate_ScopeValidatedRegardlessOfPlatform closes the bypass the
+// security review flagged: a non-manual platform with an invalid inline scope
+// must still be rejected, not silently persisted.
+func TestProjectsCreate_ScopeValidatedRegardlessOfPlatform(t *testing.T) {
+	store := newFakeStore()
+	h := newProjectsHandlerWithFake(store)
+	body := mustJSON(t, map[string]any{
+		"name":     "sneaky",
+		"platform": "hackerone",
+		"scope": map[string]any{
+			"in_scope": []map[string]any{{"type": "web", "value": "x"}},
+		},
+	})
+	w := httptest.NewRecorder()
+	h.create(w, reqWithUser(http.MethodPost, "/api/projects", body, userOf(auth.RoleUser)))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code, "invalid scope must be rejected even when platform != manual")
+	assert.Empty(t, store.projects, "nothing should be persisted")
 }
 
 // -- DELETE --

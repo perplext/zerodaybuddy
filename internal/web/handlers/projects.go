@@ -44,6 +44,11 @@ func (h *ProjectsHandler) RegisterRoutes(mux *http.ServeMux, authedChain []func(
 	mux.Handle("DELETE /api/projects/{id}", middleware.Chain(http.HandlerFunc(h.delete), authedChain...))
 }
 
+// maxProjectBodyBytes caps the POST /api/projects request body. An inline scope
+// is bounded just like the CLI's scope-file size cap, so a large body cannot be
+// decoded into memory before validation runs.
+const maxProjectBodyBytes = 1 << 20 // 1 MiB
+
 // createProjectRequest is the explicit allow-list of client-settable fields
 // for POST /api/projects. Decoding into this struct (rather than directly
 // into models.Project) prevents clients from smuggling server-set fields
@@ -98,6 +103,8 @@ func (h *ProjectsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxProjectBodyBytes)
+
 	var req createProjectRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeInvalidBody, "invalid JSON body: "+err.Error(), h.logger)
@@ -131,26 +138,54 @@ func (h *ProjectsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Type == "" {
-		req.Type = models.ProjectTypeBugBounty
-	}
-	if req.Status == "" {
-		req.Status = models.ProjectStatusActive
-	}
-	if req.Handle == "" {
-		req.Handle = req.Name
+	// Validate scope contents whenever a scope is supplied — NOT gated on
+	// platform == "manual". Gating on the platform string left a bypass: a
+	// request with platform "hackerone" and an inline scope would skip
+	// validation and persist arbitrary asset types.
+	if len(req.Scope.InScope) > 0 || len(req.Scope.OutOfScope) > 0 {
+		if err := models.ValidateScope(&req.Scope); err != nil {
+			writeError(w, http.StatusBadRequest, ErrCodeInvalidField, "scope: "+err.Error(), h.logger)
+			return
+		}
 	}
 
-	project := &models.Project{
-		Name:        req.Name,
-		Handle:      req.Handle,
-		Platform:    req.Platform,
-		Type:        req.Type,
-		Description: req.Description,
-		StartDate:   utils.CurrentTime(),
-		Status:      req.Status,
-		Scope:       req.Scope,
-		Notes:       req.Notes,
+	var project *models.Project
+	if req.Platform == models.PlatformManual {
+		// Manual mode shares construction and defaults with the CLI via
+		// models.NewManualProject, so the research-type default cannot drift
+		// between the two surfaces. (Scope is re-validated inside; harmless.)
+		p, err := models.NewManualProject(req.Name, req.Handle, req.Type, req.Scope)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, ErrCodeInvalidField, "scope: "+err.Error(), h.logger)
+			return
+		}
+		p.Description = req.Description
+		p.Notes = req.Notes
+		if req.Status != "" {
+			p.Status = req.Status
+		}
+		project = p
+	} else {
+		if req.Type == "" {
+			req.Type = models.ProjectTypeBugBounty
+		}
+		if req.Status == "" {
+			req.Status = models.ProjectStatusActive
+		}
+		if req.Handle == "" {
+			req.Handle = req.Name
+		}
+		project = &models.Project{
+			Name:        req.Name,
+			Handle:      req.Handle,
+			Platform:    req.Platform,
+			Type:        req.Type,
+			Description: req.Description,
+			StartDate:   utils.CurrentTime(),
+			Status:      req.Status,
+			Scope:       req.Scope,
+			Notes:       req.Notes,
+		}
 	}
 
 	if err := h.store.CreateProject(r.Context(), project); err != nil {
