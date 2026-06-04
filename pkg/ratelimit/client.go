@@ -33,7 +33,7 @@ func NewHTTPClient(rateLimiter *RateLimiter, config HTTPClientConfig) *HTTPClien
 	if config.Timeout == 0 {
 		config.Timeout = 30 * time.Second
 	}
-	
+
 	return &HTTPClient{
 		client: &http.Client{
 			Timeout: config.Timeout,
@@ -49,25 +49,25 @@ func NewHTTPClient(rateLimiter *RateLimiter, config HTTPClientConfig) *HTTPClien
 func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	var err error
-	
+
 	// Create retryable function
 	fn := func(ctx context.Context) error {
 		// Apply rate limiting
 		if waitErr := c.rateLimiter.Wait(ctx, c.service); waitErr != nil {
 			return fmt.Errorf("rate limit wait failed: %w", waitErr)
 		}
-		
+
 		// Log the request
 		if c.logger != nil && c.logger.IsLevelEnabled(utils.DEBUG) {
 			c.logger.Debug("Making HTTP request to %s for service %s", req.URL.String(), c.service)
 		}
-		
+
 		// Execute the request
-		resp, err = c.client.Do(req.WithContext(ctx))
+		resp, err = c.client.Do(req.WithContext(ctx)) // #nosec G704 -- intended outbound HTTP to a configured endpoint; SSRF controls enforced at the scope/scan layer
 		if err != nil {
 			return err
 		}
-		
+
 		// Check for rate limit errors
 		if resp.StatusCode == http.StatusTooManyRequests {
 			// Try to extract retry-after header
@@ -76,33 +76,33 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 					c.logger.Warn("Rate limited by server for service %s, retry-after: %s", c.service, retryAfter)
 				}
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return fmt.Errorf("rate limited by server (429)")
 		}
-		
+
 		// Check for server errors that should be retried
 		if resp.StatusCode >= 500 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return fmt.Errorf("server error: %d %s", resp.StatusCode, resp.Status)
 		}
-		
+
 		return nil
 	}
-	
+
 	// Execute with retry logic
 	result, err := RetryWithBackoffAndMetrics(ctx, c.retryConfig, fn)
-	
+
 	// Log metrics
 	if c.logger != nil && c.logger.IsLevelEnabled(utils.DEBUG) {
 		if result.Success {
-			c.logger.Debug("Request succeeded for service %s after %d attempts (latency: %v)", 
+			c.logger.Debug("Request succeeded for service %s after %d attempts (latency: %v)",
 				c.service, result.Attempts, result.TotalLatency)
 		} else {
-			c.logger.Error("Request failed for service %s after %d attempts (latency: %v): %v", 
+			c.logger.Error("Request failed for service %s after %d attempts (latency: %v): %v",
 				c.service, result.Attempts, result.TotalLatency, err)
 		}
 	}
-	
+
 	return resp, err
 }
 
@@ -131,7 +131,7 @@ func DefaultRetryableErrors() func(error) bool {
 		if err == nil {
 			return false
 		}
-		
+
 		// Retry on network errors
 		errStr := err.Error()
 		networkErrors := []string{
@@ -142,19 +142,19 @@ func DefaultRetryableErrors() func(error) bool {
 			"temporary failure",
 			"EOF",
 		}
-		
+
 		for _, netErr := range networkErrors {
 			if strings.Contains(errStr, netErr) {
 				return true
 			}
 		}
-		
+
 		// Retry on specific HTTP errors
 		if strings.Contains(errStr, "429") || // Rate limited
-		   strings.Contains(errStr, "server error") { // 5xx errors
+			strings.Contains(errStr, "server error") { // 5xx errors
 			return true
 		}
-		
+
 		return false
 	}
 }
@@ -188,6 +188,6 @@ func (f *HTTPClientFactory) CreateClient(service string, timeout time.Duration) 
 		},
 		Logger: f.logger,
 	}
-	
+
 	return NewHTTPClient(f.rateLimiter, config)
 }

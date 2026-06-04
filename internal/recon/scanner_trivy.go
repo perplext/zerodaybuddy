@@ -1,8 +1,8 @@
 package recon
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -28,7 +28,7 @@ func NewTrivyScanner(config config.ToolsConfig, logger *utils.Logger) *TrivyScan
 }
 
 func (s *TrivyScanner) Name() string        { return "trivy" }
-func (s *TrivyScanner) Description() string  { return "Scans container images for vulnerabilities" }
+func (s *TrivyScanner) Description() string { return "Scans container images for vulnerabilities" }
 
 // TrivyOutput represents the top-level Trivy JSON output.
 type TrivyOutput struct {
@@ -37,22 +37,22 @@ type TrivyOutput struct {
 
 // TrivyResult represents a single target's scan results.
 type TrivyResult struct {
-	Target          string            `json:"Target"`
-	Class           string            `json:"Class"`
-	Type            string            `json:"Type"`
+	Target          string               `json:"Target"`
+	Class           string               `json:"Class"`
+	Type            string               `json:"Type"`
 	Vulnerabilities []TrivyVulnerability `json:"Vulnerabilities"`
 }
 
 // TrivyVulnerability represents a single vulnerability found by Trivy.
 type TrivyVulnerability struct {
-	VulnerabilityID  string   `json:"VulnerabilityID"`
-	PkgName          string   `json:"PkgName"`
-	InstalledVersion string   `json:"InstalledVersion"`
-	FixedVersion     string   `json:"FixedVersion"`
-	Severity         string   `json:"Severity"`
-	Title            string   `json:"Title"`
-	Description      string   `json:"Description"`
-	References       []string `json:"References"`
+	VulnerabilityID  string               `json:"VulnerabilityID"`
+	PkgName          string               `json:"PkgName"`
+	InstalledVersion string               `json:"InstalledVersion"`
+	FixedVersion     string               `json:"FixedVersion"`
+	Severity         string               `json:"Severity"`
+	Title            string               `json:"Title"`
+	Description      string               `json:"Description"`
+	References       []string             `json:"References"`
 	CVSS             map[string]TrivyCVSS `json:"CVSS"`
 }
 
@@ -99,7 +99,7 @@ func (s *TrivyScanner) ScanVulnerabilities(ctx context.Context, project *models.
 		}
 
 		s.logger.Debug("Running Trivy: %s %v", trivyPath, args)
-		cmd := exec.CommandContext(ctx, trivyPath, args...)
+		cmd := exec.CommandContext(ctx, trivyPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 		var stderrBuf bytes.Buffer
 		cmd.Stderr = &stderrBuf
 		output, err := cmd.Output()
@@ -155,15 +155,15 @@ func trivyVulnToFinding(vuln TrivyVulnerability, target, projectID string) *mode
 	}
 
 	finding := &models.Finding{
-		ProjectID:   projectID,
-		Type:        models.FindingTypeVulnerability,
-		Title:       title,
-		Description: vuln.Description,
-		Details:     details,
-		Severity:    models.FindingSeverity(strings.ToLower(vuln.Severity)),
-		References:  append([]string{vuln.VulnerabilityID}, vuln.References...),
-		FoundBy:     "trivy",
-		Status:      models.FindingStatusNew,
+		ProjectID:      projectID,
+		Type:           models.FindingTypeVulnerability,
+		Title:          title,
+		Description:    vuln.Description,
+		Details:        details,
+		Severity:       models.FindingSeverity(strings.ToLower(vuln.Severity)),
+		References:     append([]string{vuln.VulnerabilityID}, vuln.References...),
+		FoundBy:        "trivy",
+		Status:         models.FindingStatusNew,
 		AffectedAssets: []string{target},
 	}
 

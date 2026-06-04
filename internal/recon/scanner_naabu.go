@@ -71,7 +71,7 @@ func (s *NaabuScanner) ScanPorts(ctx context.Context, project *models.Project, t
 	outputFile := filepath.Join(tempDir, "naabu_output.json")
 
 	// Write domains to the temporary file
-	if writeErr := os.WriteFile(domainsFile, []byte(strings.Join(targets, "\n")), 0644); writeErr != nil {
+	if writeErr := os.WriteFile(domainsFile, []byte(strings.Join(targets, "\n")), 0600); writeErr != nil {
 		return nil, fmt.Errorf("failed to write domains to file: %v", writeErr)
 	}
 
@@ -93,7 +93,7 @@ func (s *NaabuScanner) ScanPorts(ctx context.Context, project *models.Project, t
 	}
 
 	// Execute the command
-	cmd := exec.CommandContext(ctx, naabuPath, args...)
+	cmd := exec.CommandContext(ctx, naabuPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 	if _, cmdErr := cmd.Output(); cmdErr != nil {
 		// Check if it's an ExitError which might contain stderr
 		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
@@ -103,7 +103,7 @@ func (s *NaabuScanner) ScanPorts(ctx context.Context, project *models.Project, t
 	}
 
 	// Read and parse the output
-	outputData, err := os.ReadFile(outputFile)
+	outputData, err := os.ReadFile(outputFile) // #nosec G304 -- path is internally generated or validated upstream, not attacker-controlled
 	if err != nil {
 		return nil, fmt.Errorf("failed to read naabu output: %v", err)
 	}

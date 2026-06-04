@@ -172,7 +172,7 @@ func NewLoggerWithConfig(config LoggerConfig) *Logger {
 	// Build the writer: console only, or console + file
 	var w io.Writer = os.Stdout
 	if config.EnableFile && config.LogDir != "" {
-		if err := os.MkdirAll(config.LogDir, 0755); err != nil {
+		if err := os.MkdirAll(config.LogDir, 0750); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to create log directory: %v\n", err)
 			os.Exit(1)
 		}
@@ -322,7 +322,7 @@ func (l *Logger) Slog() *slog.Logger {
 // Close closes the log file
 func (l *Logger) Close() {
 	if l.logFile != nil {
-		l.logFile.Close()
+		_ = l.logFile.Close()
 	}
 }
 

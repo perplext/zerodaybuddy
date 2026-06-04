@@ -11,10 +11,10 @@ import (
 // Config holds the application configuration
 type Config struct {
 	// General configuration
-	DataDir  string     `mapstructure:"data_dir"`
-	LogDir   string     `mapstructure:"log_dir"`
-	Debug    bool       `mapstructure:"debug"`
-	Logging  LoggingConfig `mapstructure:"logging"`
+	DataDir string        `mapstructure:"data_dir"`
+	LogDir  string        `mapstructure:"log_dir"`
+	Debug   bool          `mapstructure:"debug"`
+	Logging LoggingConfig `mapstructure:"logging"`
 
 	// Platform API configuration
 	HackerOne HackerOneConfig `mapstructure:"hackerone"`
@@ -30,10 +30,10 @@ type Config struct {
 
 // HackerOneConfig holds HackerOne platform configuration
 type HackerOneConfig struct {
-	APIKey    string `mapstructure:"api_key"`
+	APIKey    string `mapstructure:"api_key"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
 	Username  string `mapstructure:"username"`
 	APIUrl    string `mapstructure:"api_url"`
-	AuthToken string `mapstructure:"auth_token"`
+	AuthToken string `mapstructure:"auth_token"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
 }
 
 // BugcrowdConfig holds Bugcrowd platform configuration
@@ -50,47 +50,47 @@ type ImmunefiConfig struct {
 
 // LoggingConfig holds logging configuration
 type LoggingConfig struct {
-	Level          string `mapstructure:"level"`
-	Format         string `mapstructure:"format"`
-	EnableColors   bool   `mapstructure:"enable_colors"`
-	EnableFile     bool   `mapstructure:"enable_file"`
-	MaxFileSize    int    `mapstructure:"max_file_size_mb"`
-	MaxBackups     int    `mapstructure:"max_backups"`
-	MaxAge         int    `mapstructure:"max_age_days"`
-	Compress       bool   `mapstructure:"compress"`
+	Level        string `mapstructure:"level"`
+	Format       string `mapstructure:"format"`
+	EnableColors bool   `mapstructure:"enable_colors"`
+	EnableFile   bool   `mapstructure:"enable_file"`
+	MaxFileSize  int    `mapstructure:"max_file_size_mb"`
+	MaxBackups   int    `mapstructure:"max_backups"`
+	MaxAge       int    `mapstructure:"max_age_days"`
+	Compress     bool   `mapstructure:"compress"`
 }
 
 // WebServerConfig holds web server configuration
 type WebServerConfig struct {
-	Host            string `mapstructure:"host"`
-	Port            int    `mapstructure:"port"`
-	SessionSecret   string `mapstructure:"session_secret"`
-	JWTSecret       string `mapstructure:"jwt_secret"`
-	JWTIssuer       string `mapstructure:"jwt_issuer"`
-	EnableTLS       bool   `mapstructure:"enable_tls"`
-	TLSCertFile     string `mapstructure:"tls_cert_file"`
-	TLSKeyFile      string `mapstructure:"tls_key_file"`
-	AllowedOrigins  []string `mapstructure:"allowed_origins"`
-	ProxyEnabled    bool   `mapstructure:"proxy_enabled"`
-	ProxyPort       int    `mapstructure:"proxy_port"`
+	Host           string   `mapstructure:"host"`
+	Port           int      `mapstructure:"port"`
+	SessionSecret  string   `mapstructure:"session_secret"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
+	JWTSecret      string   `mapstructure:"jwt_secret"`     // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
+	JWTIssuer      string   `mapstructure:"jwt_issuer"`
+	EnableTLS      bool     `mapstructure:"enable_tls"`
+	TLSCertFile    string   `mapstructure:"tls_cert_file"`
+	TLSKeyFile     string   `mapstructure:"tls_key_file"`
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+	ProxyEnabled   bool     `mapstructure:"proxy_enabled"`
+	ProxyPort      int      `mapstructure:"proxy_port"`
 }
 
 // ToolsConfig holds configuration for external tools
 type ToolsConfig struct {
 	SubfinderPath    string `mapstructure:"subfinder_path"`
-	AmassPath       string `mapstructure:"amass_path"`
-	NucleiPath      string `mapstructure:"nuclei_path"`
-	DalfoxPath      string `mapstructure:"dalfox_path"`
-	HTTPXPath       string `mapstructure:"httpx_path"` // Capitalized for consistency
-	NaabuPath       string `mapstructure:"naabu_path"`
-	KatanaPath      string `mapstructure:"katana_path"`
-	FFUFPath        string `mapstructure:"ffuf_path"`
-	WaybackPath     string `mapstructure:"wayback_path"`
-	TrivyPath       string `mapstructure:"trivy_path"`
-	GitleaksPath    string `mapstructure:"gitleaks_path"`
-	MaxThreads      int    `mapstructure:"max_threads"`
+	AmassPath        string `mapstructure:"amass_path"`
+	NucleiPath       string `mapstructure:"nuclei_path"`
+	DalfoxPath       string `mapstructure:"dalfox_path"`
+	HTTPXPath        string `mapstructure:"httpx_path"` // Capitalized for consistency
+	NaabuPath        string `mapstructure:"naabu_path"`
+	KatanaPath       string `mapstructure:"katana_path"`
+	FFUFPath         string `mapstructure:"ffuf_path"`
+	WaybackPath      string `mapstructure:"wayback_path"`
+	TrivyPath        string `mapstructure:"trivy_path"`
+	GitleaksPath     string `mapstructure:"gitleaks_path"`
+	MaxThreads       int    `mapstructure:"max_threads"`
 	DefaultRateLimit int    `mapstructure:"default_rate_limit"` // Requests per minute
-	DefaultWordlist string `mapstructure:"default_wordlist"`
+	DefaultWordlist  string `mapstructure:"default_wordlist"`
 }
 
 // Load loads the configuration from file and environment
@@ -102,7 +102,7 @@ func Load() (*Config, error) {
 	}
 
 	configFile := filepath.Join(configDir, "config.yaml")
-	
+
 	// Create default configuration if it doesn't exist
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		if err := createDefaultConfig(configFile); err != nil {
@@ -113,12 +113,12 @@ func Load() (*Config, error) {
 	// Initialize viper
 	v := viper.New()
 	v.SetConfigFile(configFile)
-	
+
 	// Read the configuration file
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	
+
 	// Set environment variable prefix
 	v.SetEnvPrefix("BUGBASE")
 	v.AutomaticEnv()
@@ -136,7 +136,7 @@ func Load() (*Config, error) {
 	if cfg.LogDir == "" {
 		cfg.LogDir = filepath.Join(configDir, "logs")
 	}
-	
+
 	// Set logging defaults
 	if cfg.Logging.Level == "" {
 		if cfg.Debug {
@@ -157,7 +157,7 @@ func Load() (*Config, error) {
 	if cfg.Logging.MaxAge == 0 {
 		cfg.Logging.MaxAge = 30
 	}
-	
+
 	// Set tool defaults
 	if cfg.Tools.MaxThreads == 0 {
 		cfg.Tools.MaxThreads = 10
@@ -167,10 +167,10 @@ func Load() (*Config, error) {
 	}
 
 	// Ensure directories exist
-	if err := os.MkdirAll(cfg.DataDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
-	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.LogDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
@@ -188,12 +188,12 @@ func getConfigDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	
+
 	configDir := filepath.Join(homeDir, ".zerodaybuddy")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %w", err)
 	}
-	
+
 	return configDir, nil
 }
 
@@ -279,11 +279,11 @@ func (c *Config) Save() error {
 	}
 
 	configFile := filepath.Join(configDir, "config.yaml")
-	
+
 	// Initialize viper
 	v := viper.New()
 	v.SetConfigFile(configFile)
-	
+
 	// Set the configuration values
 	v.Set("data_dir", c.DataDir)
 	v.Set("log_dir", c.LogDir)
@@ -293,11 +293,11 @@ func (c *Config) Save() error {
 	v.Set("bugcrowd", c.Bugcrowd)
 	v.Set("web_server", c.WebServer)
 	v.Set("tools", c.Tools)
-	
+
 	// Write the configuration file
 	if err := v.WriteConfig(); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
-	
+
 	return nil
 }

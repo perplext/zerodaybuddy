@@ -102,6 +102,9 @@ jobs:
         govulncheck ./...
 
     - name: Run gosec
-      uses: securego/gosec@v2.23.0
-      with:
-        args: ./...
+      # Run gosec with the runner's setup-go toolchain (above) rather than the
+      # securego/gosec Docker image, whose pinned Go (GOTOOLCHAIN=local) is older
+      # than this module's go directive and cannot load the packages.
+      run: |
+        go install github.com/securego/gosec/v2/cmd/gosec@v2.23.0
+        gosec ./...

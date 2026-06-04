@@ -37,16 +37,16 @@ func UnmarshalJSON(data string, v interface{}) error {
 // WriteFile writes data to a file
 func WriteFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
-	return os.WriteFile(path, data, 0644)
+
+	return os.WriteFile(path, data, 0600)
 }
 
 // ReadFile reads data from a file
 func ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return os.ReadFile(path) // #nosec G304 -- path is internally generated or validated upstream, not attacker-controlled
 }
 
 // IsValidURL checks if a string is a valid HTTP/HTTPS URL
@@ -63,7 +63,7 @@ func SanitizeFileName(name string) string {
 	if name == "" {
 		return ""
 	}
-	
+
 	result := ""
 	for _, char := range name {
 		switch {
@@ -82,7 +82,7 @@ func SanitizeFileName(name string) string {
 			result += "_"
 		}
 	}
-	
+
 	return result
 }
 
@@ -90,10 +90,10 @@ func SanitizeFileName(name string) string {
 func GenerateSlug(s string) string {
 	// Convert to lowercase
 	result := strings.ToLower(s)
-	
+
 	// Replace spaces with hyphens
 	result = strings.ReplaceAll(result, " ", "-")
-	
+
 	// Remove special characters
 	result = strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
@@ -101,15 +101,15 @@ func GenerateSlug(s string) string {
 		}
 		return -1
 	}, result)
-	
+
 	// Remove consecutive hyphens
 	for strings.Contains(result, "--") {
 		result = strings.ReplaceAll(result, "--", "-")
 	}
-	
+
 	// Trim hyphens from start and end
 	result = strings.Trim(result, "-")
-	
+
 	return result
 }
 
@@ -120,21 +120,21 @@ func IsInScope(urlOrDomain string, inScope []string, outOfScope []string) bool {
 	if domain == "" {
 		domain = urlOrDomain // Fallback to treating as domain directly
 	}
-	
+
 	// Check if domain is explicitly out of scope
 	for _, d := range outOfScope {
 		if MatchDomain(d, domain) {
 			return false
 		}
 	}
-	
+
 	// Check if domain is explicitly in scope
 	for _, d := range inScope {
 		if MatchDomain(d, domain) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -143,18 +143,18 @@ func MatchDomain(pattern, domain string) bool {
 	// Normalize case for comparison
 	pattern = strings.ToLower(pattern)
 	domain = strings.ToLower(domain)
-	
+
 	// Exact match
 	if pattern == domain {
 		return true
 	}
-	
+
 	// Wildcard match
 	if strings.HasPrefix(pattern, "*.") {
 		suffix := pattern[2:]
 		return strings.HasSuffix(domain, suffix) && strings.Count(domain, ".") >= strings.Count(suffix, ".")+1
 	}
-	
+
 	return false
 }
 
@@ -163,14 +163,14 @@ func IsSubdomain(subdomain, parent string) bool {
 	// Normalize domains (remove trailing dot and convert to lowercase)
 	parent = strings.ToLower(strings.TrimSuffix(parent, "."))
 	subdomain = strings.ToLower(strings.TrimSuffix(subdomain, "."))
-	
+
 	// Check dot count first
 	if strings.Count(subdomain, ".") <= strings.Count(parent, ".") {
 		return false
 	}
-	
+
 	// Check if subdomain contains parent domain (for cases like example.com.evil.com)
-	return strings.HasSuffix(subdomain, "."+parent) || 
+	return strings.HasSuffix(subdomain, "."+parent) ||
 		strings.Contains(subdomain, parent+".")
 }
 
@@ -179,7 +179,7 @@ func FormatDuration(d time.Duration) string {
 	if d == 0 {
 		return "0ms"
 	}
-	
+
 	// Handle negative durations
 	if d < 0 {
 		if d <= -time.Second {
@@ -187,7 +187,7 @@ func FormatDuration(d time.Duration) string {
 		}
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
-	
+
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
@@ -199,7 +199,7 @@ func FormatDuration(d time.Duration) string {
 		seconds := (d % time.Minute) / time.Second
 		return fmt.Sprintf("%dm %ds", minutes, seconds)
 	}
-	
+
 	hours := d / time.Hour
 	minutes := (d % time.Hour) / time.Minute
 	seconds := (d % time.Minute) / time.Second
@@ -226,14 +226,14 @@ func StringInSlice(s string, slice []string) bool {
 func UniqueStrings(slice []string) []string {
 	keys := make(map[string]bool)
 	unique := []string{}
-	
+
 	for _, item := range slice {
 		if _, exists := keys[item]; !exists {
 			keys[item] = true
 			unique = append(unique, item)
 		}
 	}
-	
+
 	return unique
 }
 
@@ -242,18 +242,18 @@ func ExtractDomain(urlString string) string {
 	if urlString == "" {
 		return ""
 	}
-	
+
 	u, err := url.Parse(urlString)
 	if err != nil || u.Host == "" || u.Scheme == "" {
 		return "" // Return empty string for invalid URLs
 	}
-	
+
 	// Extract hostname without port
 	host := u.Hostname()
 	if host == "" {
 		return ""
 	}
-	
+
 	return host
 }
 

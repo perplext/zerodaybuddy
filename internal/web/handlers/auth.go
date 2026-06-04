@@ -46,12 +46,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Sanitize username only — never sanitize passwords (reduces entropy)
 	req.Username = validation.SanitizeString(req.Username)
-	
+
 	if req.Username == "" || req.Password == "" {
 		http.Error(w, "Username and password are required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Additional username validation (lenient for login)
 	if len(req.Username) > 50 {
 		http.Error(w, "Username too long", http.StatusBadRequest)
@@ -152,7 +152,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		RefreshToken string `json:"refresh_token"`
+		RefreshToken string `json:"refresh_token"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
@@ -221,7 +221,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Current and new passwords are required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Validate new password strength
 	if err := validation.Password(req.NewPassword); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -247,7 +247,7 @@ func (h *AuthHandler) validateCreateUserRequest(req *auth.CreateUserRequest) err
 	req.Username = validation.SanitizeString(req.Username)
 	req.Email = validation.SanitizeString(req.Email)
 	req.FullName = validation.SanitizeString(req.FullName)
-	
+
 	// Validate username
 	if err := validation.Username(req.Username); err != nil {
 		return validation.ValidationError("username", err.Error())

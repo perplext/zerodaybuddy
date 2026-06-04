@@ -105,7 +105,7 @@ func (s *KatanaScanner) DiscoverEndpoints(ctx context.Context, project *models.P
 		args = append(args, "-depth", fmt.Sprintf("%d", depth))
 
 		// Execute the command
-		cmd := exec.CommandContext(ctx, katanaPath, args...)
+		cmd := exec.CommandContext(ctx, katanaPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 		if _, err := cmd.Output(); err != nil {
 			// Check if it's an ExitError which might contain stderr
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -117,7 +117,7 @@ func (s *KatanaScanner) DiscoverEndpoints(ctx context.Context, project *models.P
 		}
 
 		// Read and parse the output
-		outputData, err := os.ReadFile(outputFile)
+		outputData, err := os.ReadFile(outputFile) // #nosec G304 -- path is internally generated or validated upstream, not attacker-controlled
 		if err != nil {
 			s.logger.Warn("Failed to read Katana output for %s: %v", url, err)
 			continue

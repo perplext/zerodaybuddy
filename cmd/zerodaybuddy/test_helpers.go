@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 	"testing"
-	
+
 	"github.com/perplext/zerodaybuddy/internal/core"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 )
@@ -31,7 +31,7 @@ func createTestApp(t *testing.T) (*core.App, func()) {
 			APIKey:    "test-key",
 			Username:  "test-user",
 			AuthToken: "test-token",
-			APIUrl:   "https://api.hackerone.com/v1",
+			APIUrl:    "https://api.hackerone.com/v1",
 		},
 		Bugcrowd: config.BugcrowdConfig{
 			CookieValue: "test-cookie",
@@ -48,7 +48,7 @@ func createTestApp(t *testing.T) (*core.App, func()) {
 
 	// Return cleanup function
 	cleanup := func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	}
 
 	return app, cleanup

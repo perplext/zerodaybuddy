@@ -136,7 +136,7 @@ func NewManualProject(name, handle string, projectType ProjectType, scope Scope)
 // dropped, so a typo like "in_scopes:" surfaces as an error instead of an empty
 // scope.
 func LoadScopeFile(path string) (*Scope, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path validated upstream (validation.FilePath + extension allowlist)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open scope file: %w", err)
 	}
