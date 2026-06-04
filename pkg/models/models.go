@@ -95,20 +95,23 @@ type Project struct {
 	UpdatedAt   time.Time     `json:"updated_at"`
 }
 
-// Scope represents the scope of a bug bounty program or project
+// Scope represents the scope of a bug bounty program or project.
+// yaml tags are required for scope-file loading: yaml.v3 lowercases Go field
+// names by default, so without them `in_scope:` would unmarshal to an empty
+// slice. The json tags remain authoritative for DB serialization.
 type Scope struct {
-	InScope   []Asset `json:"in_scope"`
-	OutOfScope []Asset `json:"out_of_scope"`
+	InScope    []Asset `json:"in_scope" yaml:"in_scope"`
+	OutOfScope []Asset `json:"out_of_scope" yaml:"out_of_scope"`
 }
 
 // Asset represents a target asset in a bug bounty program or project
 type Asset struct {
-	Type         AssetType   `json:"type"`
-	Value        string      `json:"value"`
-	Description  string      `json:"description"`
-	Instructions string      `json:"instructions"`
-	Tags         []string    `json:"tags"`
-	Attributes   map[string]interface{} `json:"attributes"`
+	Type         AssetType              `json:"type" yaml:"type"`
+	Value        string                 `json:"value" yaml:"value"`
+	Description  string                 `json:"description" yaml:"description"`
+	Instructions string                 `json:"instructions" yaml:"instructions"`
+	Tags         []string               `json:"tags" yaml:"tags"`
+	Attributes   map[string]interface{} `json:"attributes" yaml:"attributes"`
 }
 
 // IsInScope checks if a given asset is in scope
