@@ -427,6 +427,48 @@ func TestHackerOne_GetProgram(t *testing.T) {
 	}
 }
 
+// TestHackerOne_GetProgram_HackerTier401 covers U5 (T3-3): a 401 on the program
+// endpoint must yield the typed ErrHackerTierToken, recommend manual mode, and
+// NOT leak the raw response body into the error.
+func TestHackerOne_GetProgram_HackerTier401(t *testing.T) {
+	const secretBody = `{"errors":[{"detail":"SUPER-SECRET-TOKEN-LEAK"}]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(secretBody))
+	}))
+	defer server.Close()
+
+	h1 := NewHackerOne(config.HackerOneConfig{
+		Username: "hacker", APIKey: "hacker-token", APIUrl: server.URL,
+	}, utils.NewLogger("", false))
+
+	_, err := h1.GetProgram(context.Background(), "some-program")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHackerTierToken, "401 should yield the typed hacker-tier error")
+	assert.Contains(t, err.Error(), "--manual", "error must recommend manual mode")
+	assert.NotContains(t, err.Error(), "SUPER-SECRET-TOKEN-LEAK", "raw response body must not leak into the error")
+}
+
+// TestHackerOne_FetchScope_HackerTier401 mirrors the above for the scope path.
+func TestHackerOne_FetchScope_HackerTier401(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("leak-me"))
+	}))
+	defer server.Close()
+
+	h1 := NewHackerOne(config.HackerOneConfig{
+		Username: "hacker", APIKey: "hacker-token", APIUrl: server.URL,
+	}, utils.NewLogger("", false))
+
+	_, err := h1.FetchScope(context.Background(), "some-program")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHackerTierToken)
+	assert.NotContains(t, err.Error(), "leak-me")
+}
+
 func TestHackerOne_FetchScope(t *testing.T) {
 	tests := []struct {
 		name           string

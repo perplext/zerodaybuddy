@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,18 @@ import (
 	"github.com/perplext/zerodaybuddy/pkg/ratelimit"
 	"github.com/perplext/zerodaybuddy/pkg/utils"
 )
+
+// ErrHackerTierToken signals that the configured HackerOne token returned 401 on
+// a program/scope endpoint — the hallmark of a hacker-tier (non-organization)
+// account, which cannot read the program API. Callers should recommend manual
+// project mode. The message is built from the status alone; the raw response
+// body is never interpolated, to avoid leaking sensitive content into
+// user-facing errors.
+var ErrHackerTierToken = errors.New(
+	"hackerone authentication failed (401): this token appears to be a hacker-tier account, " +
+		"but organization-tier access is required for the program API. " +
+		"Create the project manually instead: " +
+		"zerodaybuddy project create --manual --name <name> --scope-file <scope.yaml>")
 
 // HackerOne implements the Platform interface for HackerOne
 type HackerOne struct {
@@ -120,7 +133,8 @@ func (h *HackerOne) fetchProgramsPage(ctx context.Context, endpoint string) ([]m
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, "", fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+			h.logger.Debug("HackerOne 401 response body: %s", string(body))
+			return nil, "", ErrHackerTierToken
 		}
 		return nil, "", fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
@@ -201,7 +215,9 @@ func (h *HackerOne) GetProgram(ctx context.Context, handle string) (*models.Prog
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+			// Do not interpolate the raw body — surface a typed, actionable error.
+			h.logger.Debug("HackerOne 401 response body: %s", string(body))
+			return nil, ErrHackerTierToken
 		}
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
@@ -288,7 +304,9 @@ func (h *HackerOne) FetchScope(ctx context.Context, handle string) (*models.Scop
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf("authentication failed (401): %s. Note: Individual hacker accounts may have limited API access. Organization accounts are required for full API functionality", string(body))
+			// Do not interpolate the raw body — surface a typed, actionable error.
+			h.logger.Debug("HackerOne 401 response body: %s", string(body))
+			return nil, ErrHackerTierToken
 		}
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}

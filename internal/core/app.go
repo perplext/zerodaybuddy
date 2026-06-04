@@ -203,6 +203,14 @@ func (a *App) CreateProject(ctx context.Context, platformName, programHandle str
 	a.logger.Info("Fetching program details for %s from %s", programHandle, platformName)
 	program, err := p.GetProgram(ctx, programHandle)
 	if err != nil {
+		// A hacker-tier token can't read the program API. Surface the actionable
+		// recommendation as a validation error so its message reaches the user
+		// verbatim, instead of the generic "external service unavailable".
+		if errors.Is(err, platform.ErrHackerTierToken) {
+			return pkgerrors.ValidationError("%s", platform.ErrHackerTierToken.Error()).
+				WithContext("platform", platformName).
+				WithContext("programHandle", programHandle)
+		}
 		return pkgerrors.ExternalError(platformName, err).
 			WithContext("programHandle", programHandle)
 	}

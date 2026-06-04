@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/perplext/zerodaybuddy/internal/platform"
 	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	pkgerrors "github.com/perplext/zerodaybuddy/pkg/errors"
@@ -12,6 +13,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeHackerTierPlatform simulates a hacker-tier HackerOne token: every program
+// API call returns ErrHackerTierToken.
+type fakeHackerTierPlatform struct{}
+
+func (fakeHackerTierPlatform) ListPrograms(context.Context) ([]models.Program, error) {
+	return nil, platform.ErrHackerTierToken
+}
+func (fakeHackerTierPlatform) GetProgram(context.Context, string) (*models.Program, error) {
+	return nil, platform.ErrHackerTierToken
+}
+func (fakeHackerTierPlatform) FetchScope(context.Context, string) (*models.Scope, error) {
+	return nil, platform.ErrHackerTierToken
+}
+func (fakeHackerTierPlatform) GetName() string { return "hackerone" }
 
 func getTestConfig(t *testing.T) *config.Config {
 	t.Helper()
@@ -198,6 +214,21 @@ func TestCreateManualProjectEmptyInScopeRejected(t *testing.T) {
 
 	err := app.CreateManualProject(ctx, "empty-scope", "", "", models.Scope{})
 	require.Error(t, err)
+}
+
+func TestCreateProjectHackerTierTokenRecommendsManual(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+	app.platforms["hackerone"] = fakeHackerTierPlatform{}
+
+	err := app.CreateProject(ctx, "hackerone", "acme")
+	require.Error(t, err)
+	// The recommendation must reach the user verbatim (ValidationError path),
+	// not be swallowed by the generic "external service unavailable" message.
+	assert.Contains(t, pkgerrors.UserMessage(err), "--manual")
 }
 
 func TestRunReconProjectNotFound(t *testing.T) {
