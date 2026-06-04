@@ -16,6 +16,7 @@ func TestPlatform(t *testing.T) {
 	}{
 		{"valid hackerone", "hackerone", false},
 		{"valid bugcrowd", "bugcrowd", false},
+		{"valid manual", "manual", false},
 		{"valid with spaces", " hackerone ", false},
 		{"valid uppercase", "BUGCROWD", false},
 		{"invalid platform", "hackthebox", true},

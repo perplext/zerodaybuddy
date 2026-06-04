@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,12 +25,11 @@ const maxScopeFileSize = 1 << 20 // 1 MiB
 
 // Scope-file loading errors. Callers can match these with errors.Is.
 var (
-	ErrScopeFileTooLarge  = errors.New("scope file exceeds maximum allowed size")
-	ErrScopeFileEmpty     = errors.New("scope file is empty")
-	ErrScopeNoInScope     = errors.New("scope must declare at least one in-scope asset")
-	ErrScopeInvalidType   = errors.New("scope asset has an unknown type")
-	ErrScopeEmptyValue    = errors.New("scope asset has an empty value")
-	ErrScopeUnknownFormat = errors.New("unrecognized scope file format")
+	ErrScopeFileTooLarge = errors.New("scope file exceeds maximum allowed size")
+	ErrScopeFileEmpty    = errors.New("scope file is empty")
+	ErrScopeNoInScope    = errors.New("scope must declare at least one in-scope asset")
+	ErrScopeInvalidType  = errors.New("scope asset has an unknown type")
+	ErrScopeEmptyValue   = errors.New("scope asset has an empty value")
 )
 
 // validAssetTypes is the set of asset types accepted in a scope file. It mirrors
@@ -132,17 +132,26 @@ func NewManualProject(name, handle string, projectType ProjectType, scope Scope)
 // dropped, so a typo like "in_scopes:" surfaces as an error instead of an empty
 // scope.
 func LoadScopeFile(path string) (*Scope, error) {
-	info, err := os.Stat(path)
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat scope file: %w", err)
+		return nil, fmt.Errorf("failed to open scope file: %w", err)
 	}
-	if info.Size() > maxScopeFileSize {
+	defer f.Close()
+
+	// Stat the open handle (not the path) for a friendly up-front size error,
+	// then bound the read on the same handle. Reading through io.LimitReader
+	// makes the cap authoritative even if the file grows between stat and read
+	// or is a non-regular file, so the billion-laughs guard cannot be bypassed.
+	if info, statErr := f.Stat(); statErr == nil && info.Size() > maxScopeFileSize {
 		return nil, fmt.Errorf("%w: %d bytes (max %d)", ErrScopeFileTooLarge, info.Size(), maxScopeFileSize)
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := io.ReadAll(io.LimitReader(f, maxScopeFileSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read scope file: %w", err)
+	}
+	if int64(len(data)) > maxScopeFileSize {
+		return nil, fmt.Errorf("%w: exceeds %d bytes", ErrScopeFileTooLarge, maxScopeFileSize)
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
 		return nil, ErrScopeFileEmpty
