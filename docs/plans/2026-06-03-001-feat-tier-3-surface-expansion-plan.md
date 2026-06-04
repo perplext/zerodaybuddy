@@ -115,7 +115,7 @@ See origin: `docs/brainstorms/codebase-punch-list-requirements.md` §3 Tier 3, a
 
 > *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
 
-```
+```text
 scope.yaml / scope.json ──┐
                           ├─(CLI: LoadScopeFile)─► models.Scope ─┐
 inline JSON scope (web) ──┘                                      ├─► ValidateScope ──► CreateManualProject ──► store.CreateProject

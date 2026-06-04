@@ -133,6 +133,15 @@ func TestLoadScopeFile_EmptyFile(t *testing.T) {
 	assert.ErrorIs(t, err, ErrScopeFileEmpty)
 }
 
+func TestValidateScope_TrimsAssetValues(t *testing.T) {
+	// Surrounding whitespace must be trimmed in place so later IsInScope
+	// matching (which compares the stored value) succeeds.
+	s := &Scope{InScope: []Asset{{Type: AssetTypeDomain, Value: "  example.com  "}}}
+	require.NoError(t, ValidateScope(s))
+	assert.Equal(t, "example.com", s.InScope[0].Value, "value should be trimmed in place")
+	assert.True(t, s.IsInScope(AssetTypeDomain, "example.com"))
+}
+
 func TestValidateScope_NilAndDirect(t *testing.T) {
 	assert.ErrorIs(t, ValidateScope(nil), ErrScopeNoInScope)
 

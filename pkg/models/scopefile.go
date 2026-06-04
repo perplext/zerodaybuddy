@@ -76,13 +76,17 @@ func ValidateScope(s *Scope) error {
 }
 
 func validateAssets(field string, assets []Asset) error {
-	for i, asset := range assets {
-		if strings.TrimSpace(asset.Value) == "" {
+	for i := range assets {
+		// Normalize surrounding whitespace in place: a value like " example.com "
+		// would otherwise pass validation but fail later Scope.IsInScope matching,
+		// which compares against the stored (untrimmed) string.
+		assets[i].Value = strings.TrimSpace(assets[i].Value)
+		if assets[i].Value == "" {
 			return fmt.Errorf("%w: %s[%d]", ErrScopeEmptyValue, field, i)
 		}
-		if !IsValidAssetType(asset.Type) {
+		if !IsValidAssetType(assets[i].Type) {
 			return fmt.Errorf("%w: %s[%d] has type %q (allowed: %s)",
-				ErrScopeInvalidType, field, i, asset.Type, allowedAssetTypesList())
+				ErrScopeInvalidType, field, i, assets[i].Type, allowedAssetTypesList())
 		}
 	}
 	return nil
