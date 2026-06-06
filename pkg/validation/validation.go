@@ -15,7 +15,7 @@ import (
 
 var (
 	// Error types
-	ErrInvalidPlatform     = errors.New("invalid platform: must be 'hackerone' or 'bugcrowd'")
+	ErrInvalidPlatform     = errors.New("invalid platform: must be one of 'hackerone', 'bugcrowd', or 'manual'")
 	ErrInvalidConcurrency  = errors.New("invalid concurrency: must be between 1 and 100")
 	ErrInvalidPort         = errors.New("invalid port: must be between 1 and 65535")
 	ErrPrivilegedPort      = errors.New("privileged port: ports below 1024 require root privileges")
@@ -82,17 +82,17 @@ func Host(host string) error {
 	if net.ParseIP(host) != nil {
 		return nil
 	}
-	
+
 	// Check if it's localhost
 	if host == "localhost" {
 		return nil
 	}
-	
+
 	// Check if it's a valid hostname
 	if !hostnameRegex.MatchString(host) {
 		return ErrInvalidHost
 	}
-	
+
 	return nil
 }
 
@@ -120,27 +120,27 @@ func FilePath(path string) error {
 	if path == "" {
 		return nil // Empty path is allowed (will use default)
 	}
-	
+
 	// Clean the path
 	cleaned := filepath.Clean(path)
-	
+
 	// Check for path traversal
 	if strings.Contains(path, "..") {
 		return ErrPathTraversal
 	}
-	
+
 	// Ensure the path is within current directory or absolute
 	abs, err := filepath.Abs(cleaned)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidPath, err)
 	}
-	
+
 	// Get current directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
-	
+
 	// Allow paths within current directory or in home directory
 	homeDir, _ := os.UserHomeDir()
 	if !strings.HasPrefix(abs, cwd) && !strings.HasPrefix(abs, homeDir) {
@@ -150,7 +150,7 @@ func FilePath(path string) error {
 			return fmt.Errorf("%w: parent directory does not exist", ErrInvalidPath)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -159,27 +159,27 @@ func URL(urlStr string) error {
 	if urlStr == "" {
 		return ErrInvalidURL
 	}
-	
+
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
 	}
-	
+
 	// Check scheme
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("%w: scheme must be http or https", ErrInvalidURL)
 	}
-	
+
 	// Check host
 	if u.Host == "" {
 		return fmt.Errorf("%w: missing host", ErrInvalidURL)
 	}
-	
+
 	// Prevent scanning localhost/internal IPs by default
 	if isInternalHost(u.Host) {
 		return fmt.Errorf("%w: scanning internal hosts is not allowed", ErrInvalidURL)
 	}
-	
+
 	return nil
 }
 
@@ -188,15 +188,15 @@ func ProjectName(name string) error {
 	if name == "" {
 		return fmt.Errorf("%w: name cannot be empty", ErrInvalidProjectName)
 	}
-	
+
 	if len(name) > 100 {
 		return fmt.Errorf("%w: name too long (max 100 characters)", ErrInvalidProjectName)
 	}
-	
+
 	if !projectNameRegex.MatchString(name) {
 		return ErrInvalidProjectName
 	}
-	
+
 	return nil
 }
 
@@ -205,15 +205,15 @@ func Handle(handle string) error {
 	if handle == "" {
 		return fmt.Errorf("%w: handle cannot be empty", ErrInvalidHandle)
 	}
-	
+
 	if len(handle) > 100 {
 		return fmt.Errorf("%w: handle too long (max 100 characters)", ErrInvalidHandle)
 	}
-	
+
 	if !handleRegex.MatchString(handle) {
 		return ErrInvalidHandle
 	}
-	
+
 	return nil
 }
 
@@ -224,7 +224,7 @@ func isInternalHost(host string) bool {
 	if hostname == "" {
 		hostname = host
 	}
-	
+
 	// Check common internal hostnames
 	internalHosts := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 	for _, internal := range internalHosts {
@@ -232,13 +232,13 @@ func isInternalHost(host string) bool {
 			return true
 		}
 	}
-	
+
 	// Check if it's a private IP
 	ip := net.ParseIP(hostname)
 	if ip != nil {
 		return ip.IsLoopback() || ip.IsPrivate()
 	}
-	
+
 	return false
 }
 
@@ -247,15 +247,15 @@ func ValidateEmail(email string) error {
 	if email == "" {
 		return fmt.Errorf("%w: email cannot be empty", ErrInvalidEmail)
 	}
-	
+
 	if len(email) > 254 {
 		return fmt.Errorf("%w: email too long (max 254 characters)", ErrInvalidEmail)
 	}
-	
+
 	if !emailRegex.MatchString(email) {
 		return ErrInvalidEmail
 	}
-	
+
 	return nil
 }
 
@@ -277,6 +277,6 @@ func ScopeURL(urlStr string, allowInternal bool) error {
 		}
 		return err
 	}
-	
+
 	return nil
 }

@@ -40,13 +40,13 @@ func (s *FFUFScanner) Description() string {
 
 // FFUFResult represents a parsed result from FFUF
 type FFUFResult struct {
-	URL        string `json:"url"`
-	Status     int    `json:"status"`
-	Length     int    `json:"length"`
-	Words      int    `json:"words"`
-	Lines      int    `json:"lines"`
+	URL         string `json:"url"`
+	Status      int    `json:"status"`
+	Length      int    `json:"length"`
+	Words       int    `json:"words"`
+	Lines       int    `json:"lines"`
 	ContentType string `json:"content_type"`
-	Redirects  string `json:"redirects,omitempty"`
+	Redirects   string `json:"redirects,omitempty"`
 }
 
 // DiscoverEndpoints implements EndpointDiscoverer.
@@ -132,7 +132,7 @@ func (s *FFUFScanner) DiscoverEndpoints(ctx context.Context, project *models.Pro
 		args = append(args, "-timeout", "5")
 
 		// Execute the command
-		cmd := exec.CommandContext(ctx, ffufPath, args...)
+		cmd := exec.CommandContext(ctx, ffufPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 		if _, err := cmd.Output(); err != nil {
 			// Since FFUF returns non-zero exit code even on success sometimes,
 			// we'll check if the output file exists and has content
@@ -148,7 +148,7 @@ func (s *FFUFScanner) DiscoverEndpoints(ctx context.Context, project *models.Pro
 		}
 
 		// Read and parse the output
-		outputData, err := os.ReadFile(outputFile)
+		outputData, err := os.ReadFile(outputFile) // #nosec G304 -- path is internally generated or validated upstream, not attacker-controlled
 		if err != nil {
 			s.logger.Warn("Failed to read FFUF output for %s: %v", baseURL, err)
 			continue

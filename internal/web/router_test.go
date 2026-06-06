@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/perplext/zerodaybuddy/internal/auth"
 	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	"github.com/perplext/zerodaybuddy/pkg/utils"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
@@ -453,10 +453,16 @@ func TestRouter_FullProjectLifecycle(t *testing.T) {
 	userToken := loginAs(t, authSvc, store, "alice", "ValidPass123!", auth.RoleUser)
 	adminToken := loginAs(t, authSvc, store, "admintest", "ValidPass123!", auth.RoleAdmin)
 
-	// User creates a project
+	// User creates a manual project (manual mode requires a non-empty scope,
+	// which also exercises scope round-tripping through SQLite).
 	createBody, _ := json.Marshal(map[string]any{
 		"name":     "lifecycle-test",
 		"platform": "manual",
+		"scope": map[string]any{
+			"in_scope": []map[string]any{
+				{"type": "domain", "value": "example.com"},
+			},
+		},
 	})
 	w := doRequest(t, srv, http.MethodPost, "/api/projects", createBody, map[string]string{
 		"Authorization": "Bearer " + userToken,

@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/perplext/zerodaybuddy/internal/core"
 	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/internal/storage/migrations"
 	pkgerrors "github.com/perplext/zerodaybuddy/pkg/errors"
 	"github.com/perplext/zerodaybuddy/pkg/validation"
-	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 )
 
@@ -40,12 +40,12 @@ func createMigrateUpCommand(app *core.App) *cobra.Command {
 			defer db.Close()
 
 			migrator := migrations.NewMigrator(db)
-			
+
 			fmt.Println("Running migrations...")
 			if err := migrator.Migrate(cmd.Context()); err != nil {
 				return err
 			}
-			
+
 			fmt.Println("All migrations completed successfully")
 			return nil
 		},
@@ -64,11 +64,11 @@ func createMigrateDownCommand(app *core.App) *cobra.Command {
 			if err := validation.PositiveInteger(steps, "steps"); err != nil {
 				return fmt.Errorf("invalid steps: %w", err)
 			}
-			
+
 			if steps > 100 {
 				return fmt.Errorf("too many steps: maximum 100 migrations can be rolled back at once")
 			}
-			
+
 			db, err := openDatabase(app)
 			if err != nil {
 				return err
@@ -76,19 +76,19 @@ func createMigrateDownCommand(app *core.App) *cobra.Command {
 			defer db.Close()
 
 			migrator := migrations.NewMigrator(db)
-			
+
 			fmt.Printf("Rolling back %d migration(s)...\n", steps)
 			if err := migrator.Rollback(cmd.Context(), steps); err != nil {
 				return err
 			}
-			
+
 			fmt.Println("Rollback completed successfully")
 			return nil
 		},
 	}
 
 	cmd.Flags().IntVarP(&steps, "steps", "n", 1, "Number of migrations to rollback")
-	
+
 	return cmd
 }
 
@@ -115,45 +115,45 @@ func createMigrateStatusCommand(app *core.App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			
+
 			// Get all migrations
 			all, err := migrator.LoadMigrations()
 			if err != nil {
 				return err
 			}
-			
+
 			// Create map of applied migrations
 			appliedMap := make(map[int]migrations.Migration)
 			for _, m := range applied {
 				appliedMap[m.Version] = m
 			}
-			
+
 			// Display status
 			fmt.Println("Migration Status:")
 			fmt.Println("=================")
-			
+
 			for _, migration := range all {
 				status := "Pending"
 				var appliedAt string
-				
+
 				if applied, ok := appliedMap[migration.Version]; ok {
 					status = "Applied"
 					appliedAt = applied.AppliedAt.Format("2006-01-02 15:04:05")
 				}
-				
-				fmt.Printf("%03d %-30s %-10s %s\n", 
-					migration.Version, 
-					migration.Name, 
+
+				fmt.Printf("%03d %-30s %-10s %s\n",
+					migration.Version,
+					migration.Name,
 					status,
 					appliedAt,
 				)
 			}
-			
+
 			// Show summary
 			pending := len(all) - len(applied)
-			fmt.Printf("\nTotal: %d migrations (%d applied, %d pending)\n", 
+			fmt.Printf("\nTotal: %d migrations (%d applied, %d pending)\n",
 				len(all), len(applied), pending)
-			
+
 			return nil
 		},
 	}
@@ -170,34 +170,34 @@ func createMigrateCreateCommand(app *core.App) *cobra.Command {
 			if name == "" {
 				return pkgerrors.ValidationError("migration name is required")
 			}
-			
+
 			// Validate name format
 			if err := validation.MigrationName(name); err != nil {
 				return fmt.Errorf("invalid migration name: %w", err)
 			}
-			
+
 			// Get next version number
 			db, err := openDatabase(app)
 			if err != nil {
 				return err
 			}
 			defer db.Close()
-			
+
 			migrator := migrations.NewMigrator(db)
 			all, err := migrator.LoadMigrations()
 			if err != nil {
 				return err
 			}
-			
+
 			nextVersion := 1
 			if len(all) > 0 {
 				nextVersion = all[len(all)-1].Version + 1
 			}
-			
+
 			// Create migration file
 			filename := fmt.Sprintf("%03d_%s.sql", nextVersion, name)
 			filepath := fmt.Sprintf("internal/storage/migrations/sql/%s", filename)
-			
+
 			template := `-- Description: %s
 
 -- +migrate Up
@@ -206,22 +206,22 @@ func createMigrateCreateCommand(app *core.App) *cobra.Command {
 -- +migrate Down
 -- Write your DOWN migration here
 `
-			
+
 			content := fmt.Sprintf(template, name)
-			
+
 			// Note: In a real implementation, you would write this file
 			// For now, just print the information
 			fmt.Printf("Migration file to create: %s\n", filepath)
 			fmt.Printf("Content:\n%s\n", content)
 			fmt.Println("\nNote: Please create this file manually in your migration directory")
-			
+
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Migration name (e.g., add_user_table)")
 	_ = cmd.MarkFlagRequired("name")
-	
+
 	return cmd
 }
 
@@ -239,7 +239,7 @@ func openDatabase(app *core.App) (*sqlx.DB, error) {
 
 	// Apply shared SQLite PRAGMAs
 	if err := storage.ConfigureSQLite(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, pkgerrors.InternalError("failed to configure database", err).
 			WithContext("dbPath", dbPath)
 	}

@@ -41,18 +41,18 @@ func (s *NucleiScanner) Description() string {
 
 // NucleiResult represents a parsed result from Nuclei
 type NucleiResult struct {
-	TemplateID     string            `json:"template-id"`
-	Info           NucleiResultInfo  `json:"info"`
-	Host           string            `json:"host"`
-	MatcherName    string            `json:"matcher-name,omitempty"`
-	Type           string            `json:"type"`
-	Severity       string            `json:"severity"`
-	ExtractedData  map[string]string `json:"extracted-data,omitempty"`
-	IP             string            `json:"ip,omitempty"`
-	Timestamp      string            `json:"timestamp"`
-	CurlCommand    string            `json:"curl-command,omitempty"`
-	MatcherStatus  bool              `json:"matcher-status"`
-	MatchedAt      string            `json:"matched-at,omitempty"`
+	TemplateID    string            `json:"template-id"`
+	Info          NucleiResultInfo  `json:"info"`
+	Host          string            `json:"host"`
+	MatcherName   string            `json:"matcher-name,omitempty"`
+	Type          string            `json:"type"`
+	Severity      string            `json:"severity"`
+	ExtractedData map[string]string `json:"extracted-data,omitempty"`
+	IP            string            `json:"ip,omitempty"`
+	Timestamp     string            `json:"timestamp"`
+	CurlCommand   string            `json:"curl-command,omitempty"`
+	MatcherStatus bool              `json:"matcher-status"`
+	MatchedAt     string            `json:"matched-at,omitempty"`
 }
 
 // NucleiResultInfo contains information about the template
@@ -109,7 +109,7 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	targetsFile := filepath.Join(tempDir, "targets.txt")
 	outputFile := filepath.Join(tempDir, "nuclei_output.json")
 
-	writeErr := os.WriteFile(targetsFile, []byte(strings.Join(inScopeURLs, "\n")), 0644)
+	writeErr := os.WriteFile(targetsFile, []byte(strings.Join(inScopeURLs, "\n")), 0600)
 	if writeErr != nil {
 		return nil, fmt.Errorf("failed to write targets to file: %v", writeErr)
 	}
@@ -187,7 +187,7 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 
 	// Execute the command
 	s.logger.Debug("Running Nuclei with args: %v", args)
-	cmd := exec.CommandContext(ctx, nucleiPath, args...)
+	cmd := exec.CommandContext(ctx, nucleiPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 	if _, cmdErr := cmd.Output(); cmdErr != nil {
 		// Nuclei may return non-zero exit code even when it finds issues
 		// Check if the output file exists and has content
@@ -201,7 +201,7 @@ func (s *NucleiScanner) ScanVulnerabilities(ctx context.Context, project *models
 	}
 
 	// Read and parse the output
-	outputData, err := os.ReadFile(outputFile)
+	outputData, err := os.ReadFile(outputFile) // #nosec G304 -- path is internally generated or validated upstream, not attacker-controlled
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

@@ -86,7 +86,7 @@ func (g *GitHubIssueCreator) CreateIssueFromFinding(ctx context.Context, finding
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := g.client.Do(req)
+	resp, err := g.client.Do(req) // #nosec G704 -- intended outbound HTTP to a configured endpoint; SSRF controls enforced at the scope/scan layer
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}

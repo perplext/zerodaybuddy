@@ -61,10 +61,11 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        # Pinned to 1.25.10 to clear GO-2026-4982 (html/template XSS via
-        # incorrect URL escaping in tag attributes). Bump to the next 1.25.x
-        # patch when a security advisory targets this line again.
-        go-version: '1.25.10'
+        # Pinned to 1.25.11 to clear GO-2026-5039 (net/textproto error
+        # escaping) and GO-2026-5037 (crypto/x509 hostname parsing); 1.25.10
+        # previously cleared GO-2026-4982 (html/template XSS). Bump to the next
+        # 1.25.x patch when a security advisory targets this line again.
+        go-version: '1.25.11'
 
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v6
@@ -89,10 +90,11 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        # Pinned to 1.25.10 to clear GO-2026-4982 (html/template XSS via
-        # incorrect URL escaping in tag attributes). Bump to the next 1.25.x
-        # patch when a security advisory targets this line again.
-        go-version: '1.25.10'
+        # Pinned to 1.25.11 to clear GO-2026-5039 (net/textproto error
+        # escaping) and GO-2026-5037 (crypto/x509 hostname parsing); 1.25.10
+        # previously cleared GO-2026-4982 (html/template XSS). Bump to the next
+        # 1.25.x patch when a security advisory targets this line again.
+        go-version: '1.25.11'
 
     - name: Run govulncheck
       run: |
@@ -100,6 +102,9 @@ jobs:
         govulncheck ./...
 
     - name: Run gosec
-      uses: securego/gosec@v2.23.0
-      with:
-        args: ./...
+      # Run gosec with the runner's setup-go toolchain (above) rather than the
+      # securego/gosec Docker image, whose pinned Go (GOTOOLCHAIN=local) is older
+      # than this module's go directive and cannot load the packages.
+      run: |
+        go install github.com/securego/gosec/v2/cmd/gosec@v2.23.0
+        gosec ./...

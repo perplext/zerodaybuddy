@@ -6,25 +6,25 @@ import (
 
 // User represents a user in the system
 type User struct {
-	ID        string    `json:"id" db:"id"`
-	Username  string    `json:"username" db:"username"`
-	Email     string    `json:"email" db:"email"`
-	FullName  string    `json:"full_name" db:"full_name"`
-	Password  string    `json:"-" db:"password_hash"` // Never serialize password
-	Role      UserRole  `json:"role" db:"role"`
+	ID        string     `json:"id" db:"id"`
+	Username  string     `json:"username" db:"username"`
+	Email     string     `json:"email" db:"email"`
+	FullName  string     `json:"full_name" db:"full_name"`
+	Password  string     `json:"-" db:"password_hash"` // Never serialize password
+	Role      UserRole   `json:"role" db:"role"`
 	Status    UserStatus `json:"status" db:"status"`
 	LastLogin *time.Time `json:"last_login,omitempty" db:"last_login"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // UserRole represents user roles in the system
 type UserRole string
 
 const (
-	RoleAdmin     UserRole = "admin"
-	RoleUser      UserRole = "user"
-	RoleReadOnly  UserRole = "readonly"
+	RoleAdmin    UserRole = "admin"
+	RoleUser     UserRole = "user"
+	RoleReadOnly UserRole = "readonly"
 )
 
 // UserStatus represents user account status
@@ -54,7 +54,7 @@ type CreateUserRequest struct {
 	Username string   `json:"username" validate:"required,min=3,max=50"`
 	Email    string   `json:"email" validate:"required,email"`
 	FullName string   `json:"full_name" validate:"required,min=2,max=100"`
-	Password string   `json:"password" validate:"required,min=8"`
+	Password string   `json:"password" validate:"required,min=8"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
 	Role     UserRole `json:"role,omitempty"`
 }
 
@@ -62,7 +62,7 @@ type CreateUserRequest struct {
 // Note: Password field accepts JSON input but should never be logged directly
 type LoginRequest struct {
 	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
+	Password string `json:"password" validate:"required"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
 }
 
 // ChangePasswordRequest represents a password change request

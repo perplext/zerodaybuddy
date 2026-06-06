@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/perplext/zerodaybuddy/internal/platform"
 	"github.com/perplext/zerodaybuddy/internal/storage"
 	"github.com/perplext/zerodaybuddy/pkg/config"
 	pkgerrors "github.com/perplext/zerodaybuddy/pkg/errors"
@@ -12,6 +13,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeHackerTierPlatform simulates a hacker-tier HackerOne token: every program
+// API call returns ErrHackerTierToken.
+type fakeHackerTierPlatform struct{}
+
+func (fakeHackerTierPlatform) ListPrograms(context.Context) ([]models.Program, error) {
+	return nil, platform.ErrHackerTierToken
+}
+func (fakeHackerTierPlatform) GetProgram(context.Context, string) (*models.Program, error) {
+	return nil, platform.ErrHackerTierToken
+}
+func (fakeHackerTierPlatform) FetchScope(context.Context, string) (*models.Scope, error) {
+	return nil, platform.ErrHackerTierToken
+}
+func (fakeHackerTierPlatform) GetName() string { return "hackerone" }
 
 func getTestConfig(t *testing.T) *config.Config {
 	t.Helper()
@@ -46,7 +62,7 @@ func getTestConfig(t *testing.T) *config.Config {
 func TestNewApp(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	assert.NotNil(t, app)
 	assert.Equal(t, cfg, app.config)
 	assert.NotNil(t, app.logger)
@@ -57,10 +73,10 @@ func TestNewApp(t *testing.T) {
 func TestAppInitialize(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
-	
+
 	require.NoError(t, err)
 	assert.NotNil(t, app.store)
 	assert.NotNil(t, app.authSvc)
@@ -77,11 +93,11 @@ func TestAppInitializeWithoutJWTSecret(t *testing.T) {
 	cfg := getTestConfig(t)
 	cfg.WebServer.JWTSecret = ""
 	cfg.WebServer.JWTIssuer = ""
-	
+
 	app := NewApp(cfg)
 	ctx := context.Background()
 	err := app.Initialize(ctx)
-	
+
 	require.NoError(t, err)
 	assert.NotNil(t, app.authSvc)
 }
@@ -89,11 +105,11 @@ func TestAppInitializeWithoutJWTSecret(t *testing.T) {
 func TestGetAuthService(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	authSvc := app.GetAuthService()
 	assert.NotNil(t, authSvc)
 	assert.Equal(t, app.authSvc, authSvc)
@@ -102,7 +118,7 @@ func TestGetAuthService(t *testing.T) {
 func TestGetConfig(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	returnedCfg := app.GetConfig()
 	assert.Equal(t, cfg, returnedCfg)
 }
@@ -110,11 +126,11 @@ func TestGetConfig(t *testing.T) {
 func TestListProgramsUnknownPlatform(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.ListPrograms(ctx, "unknown-platform")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown platform")
@@ -123,11 +139,11 @@ func TestListProgramsUnknownPlatform(t *testing.T) {
 func TestCreateProjectUnknownPlatform(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.CreateProject(ctx, "unknown-platform", "test-handle")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown platform")
@@ -136,24 +152,93 @@ func TestCreateProjectUnknownPlatform(t *testing.T) {
 func TestListProjects(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	// Should not error even with no projects
 	err = app.ListProjects(ctx)
 	assert.NoError(t, err)
 }
 
+func TestCreateManualProject(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+
+	scope := models.Scope{
+		InScope: []models.Asset{
+			{Type: models.AssetTypeDomain, Value: "example.com"},
+			{Type: models.AssetTypeDomain, Value: "*.example.com"},
+		},
+	}
+
+	err := app.CreateManualProject(ctx, "manual-target", "", "", scope)
+	require.NoError(t, err)
+
+	// Persisted with manual-mode defaults.
+	project, err := app.store.GetProjectByName(ctx, "manual-target")
+	require.NoError(t, err)
+	assert.Equal(t, models.PlatformManual, project.Platform)
+	assert.Equal(t, models.ProjectTypeResearch, project.Type, "manual default type is research")
+	assert.Equal(t, models.ProjectStatusActive, project.Status)
+	assert.Equal(t, "manual-target", project.Handle, "handle derived from name")
+	assert.Len(t, project.Scope.InScope, 2)
+}
+
+func TestCreateManualProjectInvalidScopeRejected(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+
+	// Unknown asset type must be rejected and nothing persisted.
+	bad := models.Scope{InScope: []models.Asset{{Type: models.AssetType("web"), Value: "x"}}}
+	err := app.CreateManualProject(ctx, "bad-scope", "", "", bad)
+	require.Error(t, err)
+
+	_, err = app.store.GetProjectByName(ctx, "bad-scope")
+	assert.Error(t, err, "no project should be persisted on validation failure")
+}
+
+func TestCreateManualProjectEmptyInScopeRejected(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+
+	err := app.CreateManualProject(ctx, "empty-scope", "", "", models.Scope{})
+	require.Error(t, err)
+}
+
+func TestCreateProjectHackerTierTokenRecommendsManual(t *testing.T) {
+	cfg := getTestConfig(t)
+	app := NewApp(cfg)
+
+	ctx := context.Background()
+	require.NoError(t, app.Initialize(ctx))
+	app.platforms["hackerone"] = fakeHackerTierPlatform{}
+
+	err := app.CreateProject(ctx, "hackerone", "acme")
+	require.Error(t, err)
+	// The recommendation must reach the user verbatim (ValidationError path),
+	// not be swallowed by the generic "external service unavailable" message.
+	assert.Contains(t, pkgerrors.UserMessage(err), "--manual")
+}
+
 func TestRunReconProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.RunRecon(ctx, "non-existent-project", 5)
 	assert.Error(t, err)
 	// The error should be wrapped as a NotFoundError
@@ -169,11 +254,11 @@ func TestRunReconProjectNotFound(t *testing.T) {
 func TestRunScanProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.RunScan(ctx, "non-existent-project", "", 5)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get project")
@@ -182,11 +267,11 @@ func TestRunScanProjectNotFound(t *testing.T) {
 func TestGenerateReportProjectNotFound(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	ctx := context.Background()
 	err := app.Initialize(ctx)
 	require.NoError(t, err)
-	
+
 	err = app.GenerateReport(ctx, "non-existent-project", "", "markdown", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get project")
@@ -236,7 +321,7 @@ func TestServeWithoutInit(t *testing.T) {
 func TestRunReconWithoutInit(t *testing.T) {
 	cfg := getTestConfig(t)
 	app := NewApp(cfg)
-	
+
 	// Create a fresh store instance for this test
 	tempDir := t.TempDir()
 	store, err := storage.NewStore(tempDir)
@@ -244,7 +329,7 @@ func TestRunReconWithoutInit(t *testing.T) {
 	app.store = store
 	// Ensure services are nil
 	app.reconSvc = nil
-	
+
 	// Create a test project with unique name
 	ctx := context.Background()
 	project := &models.Project{
@@ -256,7 +341,7 @@ func TestRunReconWithoutInit(t *testing.T) {
 	}
 	err = app.store.CreateProject(ctx, project)
 	require.NoError(t, err)
-	
+
 	// Try to run recon without initializing services
 	err = app.RunRecon(ctx, "Recon Test Project", 5)
 	assert.Error(t, err)

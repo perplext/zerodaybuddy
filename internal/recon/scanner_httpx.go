@@ -76,7 +76,7 @@ func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, 
 	outputFile := filepath.Join(tempDir, "httpx_output.json")
 
 	// Write domains to the temporary file
-	if writeErr := os.WriteFile(domainsFile, []byte(strings.Join(hosts, "\n")), 0644); writeErr != nil {
+	if writeErr := os.WriteFile(domainsFile, []byte(strings.Join(hosts, "\n")), 0600); writeErr != nil {
 		return nil, fmt.Errorf("failed to write domains to file: %v", writeErr)
 	}
 
@@ -98,7 +98,7 @@ func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, 
 	args = append(args, "-rate-limit", "50")
 
 	// Execute the command
-	cmd := exec.CommandContext(ctx, httpxPath, args...)
+	cmd := exec.CommandContext(ctx, httpxPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 	if _, cmdErr := cmd.Output(); cmdErr != nil {
 		// Check if it's an ExitError which might contain stderr
 		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
@@ -108,7 +108,7 @@ func (s *HTTPXScanner) ProbeHosts(ctx context.Context, project *models.Project, 
 	}
 
 	// Read and parse the output
-	outputData, err := os.ReadFile(outputFile)
+	outputData, err := os.ReadFile(outputFile) // #nosec G304 -- path is internally generated or validated upstream, not attacker-controlled
 	if err != nil {
 		return nil, fmt.Errorf("failed to read httpx output: %v", err)
 	}

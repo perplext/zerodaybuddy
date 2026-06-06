@@ -44,7 +44,7 @@ func (s *AmassScanner) ScanSubdomains(ctx context.Context, project *models.Proje
 		amassPath = "amass"
 	}
 
-	cmd := exec.CommandContext(ctx, amassPath, args...)
+	cmd := exec.CommandContext(ctx, amassPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

@@ -27,7 +27,7 @@ func NewWaybackScanner(config config.ToolsConfig, logger *utils.Logger) *Wayback
 	// Create rate limiter with config
 	rlConfig := ratelimit.DefaultConfig()
 	rateLimiter := ratelimit.New(rlConfig)
-	
+
 	// Create HTTP client with rate limiting
 	httpClient := ratelimit.NewHTTPClient(rateLimiter, ratelimit.HTTPClientConfig{
 		Service: "wayback",
@@ -42,7 +42,7 @@ func NewWaybackScanner(config config.ToolsConfig, logger *utils.Logger) *Wayback
 		},
 		Logger: logger,
 	})
-	
+
 	return &WaybackScanner{
 		config:      config,
 		logger:      logger,
@@ -110,7 +110,7 @@ func (s *WaybackScanner) DiscoverEndpoints(ctx context.Context, project *models.
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			s.logger.Warn("Failed to read response from Wayback Machine: %v", err)
 			continue

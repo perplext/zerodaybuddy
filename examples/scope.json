@@ -1,0 +1,12 @@
+{
+  "in_scope": [
+    { "type": "domain", "value": "example.com", "description": "Primary apex domain" },
+    { "type": "domain", "value": "*.example.com", "description": "All subdomains (wildcard)" },
+    { "type": "ip", "value": "10.0.0.0/8", "description": "Internal range (in scope for authorization; scan SSRF filter still applies)" },
+    { "type": "url", "value": "https://app.example.com/api", "description": "Primary API surface", "tags": ["high-value"] }
+  ],
+  "out_of_scope": [
+    { "type": "domain", "value": "blog.example.com", "description": "Marketing blog — do not test" },
+    { "type": "url", "value": "https://example.com/legal", "description": "Static legal pages" }
+  ]
+}

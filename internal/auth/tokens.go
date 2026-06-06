@@ -11,19 +11,19 @@ import (
 
 // TokenManager handles JWT token creation and validation
 type TokenManager struct {
-	secret         []byte
-	issuer         string
-	accessExpiry   time.Duration
-	refreshExpiry  time.Duration
+	secret        []byte
+	issuer        string
+	accessExpiry  time.Duration
+	refreshExpiry time.Duration
 }
 
 // NewTokenManager creates a new token manager
 func NewTokenManager(secret, issuer string) *TokenManager {
 	return &TokenManager{
-		secret:         []byte(secret),
-		issuer:         issuer,
-		accessExpiry:   15 * time.Minute,   // Access tokens expire in 15 minutes
-		refreshExpiry:  7 * 24 * time.Hour, // Refresh tokens expire in 7 days
+		secret:        []byte(secret),
+		issuer:        issuer,
+		accessExpiry:  15 * time.Minute,   // Access tokens expire in 15 minutes
+		refreshExpiry: 7 * 24 * time.Hour, // Refresh tokens expire in 7 days
 	}
 }
 
@@ -38,8 +38,8 @@ type Claims struct {
 
 // TokenPair represents an access/refresh token pair
 type TokenPair struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+	AccessToken  string `json:"access_token"`  // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
+	RefreshToken string `json:"refresh_token"` // #nosec G117 -- field must carry this value by design; not exposed through an untrusted serialization sink
 	ExpiresIn    int64  `json:"expires_in"`
 }
 

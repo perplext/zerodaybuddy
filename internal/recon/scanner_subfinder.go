@@ -57,7 +57,7 @@ func (s *SubfinderScanner) ScanSubdomains(ctx context.Context, project *models.P
 	}
 	args = append(args, "-rate-limit", fmt.Sprintf("%d", rateLimit))
 
-	cmd := exec.CommandContext(ctx, subfinderPath, args...)
+	cmd := exec.CommandContext(ctx, subfinderPath, args...) // #nosec G204 -- runs a fixed tool binary with internally-built args (no shell); inputs derive from validated scope
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
