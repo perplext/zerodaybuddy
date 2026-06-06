@@ -26,12 +26,18 @@ The codebase follows a clean architecture pattern:
 - **internal/report/**: Report generation — Markdown, JSON, CSV, SARIF v2.1.0, and GitHub issue integration
 - **internal/storage/**: SQLite database layer with Store interface and bulk operations
 - **internal/auth/**: bcrypt password hashing, JWT issuance with auto-generated secret, refresh tokens
-- **internal/web/**: HTTP server scaffold (see "Web UI Status" below)
+- **internal/web/**: HTTP server with wired router, auth + data-model REST handlers, middleware stack, and a server-rendered HTMX dashboard (see "Web UI Status" below)
 - **pkg/**: Shared packages (config, models, utils, errors, validation, ratelimit)
 
 ## Web UI Status
 
-> **The web UI is built but not yet wired.** `internal/web/handlers/` (auth) and `internal/web/middleware/` (auth, errors, ratelimit, security) contain implemented, tested code, but `internal/web/server.go` currently registers only `/health` and a static welcome page. Wiring is tracked as Tier 2 work in the punch list (`docs/brainstorms/codebase-punch-list-requirements.md`). When working in `internal/web/`, do not assume the handler/middleware code is reachable from the running server.
+> **The web UI is wired and functional** (Tier 2 of the punch list, merged via PRs #19–#21). `internal/web/server.go` builds a real router (`buildRouter`) that registers:
+> - **Auth API**: `POST /api/auth/{login,register,refresh,logout,change-password}`, `GET /api/auth/profile`
+> - **Data-model REST API**: `/api/projects` (list/get/create/delete), plus read endpoints for hosts, endpoints, findings, and tasks (`internal/web/handlers/`)
+> - **Dashboard**: server-rendered HTMX pages with cookie auth, served from `web/templates/` and `web/static/`
+> - **`/health`** and the static index
+>
+> The middleware stack (`RecoverPanic → SecurityHeaders → RateLimit → Auth`) is applied via `internal/web/middleware/`. Project creation supports both platform mode and **manual mode** (scope-file/inline-scope; see "Manual project mode" below). Routes are only registered when their dependencies are present — `server.go` logs a warning and skips a route group when `Store` or `AuthService` is nil (e.g., in isolated handler tests).
 
 ## Key Interfaces
 
@@ -119,7 +125,7 @@ go test ./... -tags=integration
 ## Important Notes
 
 - Always validate target scope before running scans (use `pkg/models.Scope.IsInScope` — wildcards, CIDR, and dot-anchored subdomain matching all supported)
-- The web server runs on port 8080 by default (currently serves only `/health` and welcome page — see "Web UI Status" above)
+- The web server runs on port 8080 by default (auth + data-model REST API and an HTMX dashboard are wired — see "Web UI Status" above)
 - JSON fields in the database use custom serialization (see pkg/utils/json.go)
 - Rate limiting is implemented for external API calls (`pkg/ratelimit/`)
 - SSRF protection in the scan service blocks RFC 1918, cloud metadata, and IPv6 ULA/link-local ranges
