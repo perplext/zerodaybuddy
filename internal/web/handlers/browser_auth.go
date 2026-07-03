@@ -110,7 +110,7 @@ func (h *BrowserAuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, h.makeSessionCookie(resp.Token, h.isSecureRequest(r)))
+	http.SetCookie(w, h.makeSessionCookie(resp.Token))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -125,20 +125,20 @@ func (h *BrowserAuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	http.SetCookie(w, h.makeClearedCookie(h.isSecureRequest(r)))
+	http.SetCookie(w, h.makeClearedCookie())
 	http.Redirect(w, r, "/login?logged-out=1", http.StatusSeeOther)
 }
 
-// makeSessionCookie builds the Set-Cookie value carrying the JWT. secure
-// is decided per-request by the caller via isSecureRequest.
-func (h *BrowserAuthHandler) makeSessionCookie(token string, secure bool) *http.Cookie {
+// makeSessionCookie builds the Set-Cookie value carrying the JWT.
+// Session cookies are always marked Secure to enforce HTTPS-only transport.
+func (h *BrowserAuthHandler) makeSessionCookie(token string) *http.Cookie {
 	return &http.Cookie{
 		Name:     middleware.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   sessionCookieMaxAge,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
