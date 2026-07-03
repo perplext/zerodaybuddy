@@ -110,7 +110,7 @@ func (h *BrowserAuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, h.makeSessionCookie(resp.Token, h.isSecureRequest(r)))
+	http.SetCookie(w, h.makeSessionCookie(resp.Token))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -125,7 +125,7 @@ func (h *BrowserAuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	http.SetCookie(w, h.makeClearedCookie(h.isSecureRequest(r)))
+	http.SetCookie(w, h.makeClearedCookie())
 	http.Redirect(w, r, "/login?logged-out=1", http.StatusSeeOther)
 }
 
