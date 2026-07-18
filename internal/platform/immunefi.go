@@ -56,6 +56,35 @@ func NewImmunefi(cfg config.ImmunefiConfig, logger *utils.Logger) Platform {
 	}
 }
 
+// NewImmunefiWithRateLimiter creates a new Immunefi platform instance using a
+// shared rate limiter, mirroring the HackerOne/Bugcrowd constructors so all
+// platforms coordinate their outbound request budget through one limiter.
+func NewImmunefiWithRateLimiter(cfg config.ImmunefiConfig, logger *utils.Logger, rateLimiter *ratelimit.RateLimiter) Platform {
+	if cfg.APIUrl == "" {
+		cfg.APIUrl = immunefiDefaultAPIURL
+	}
+
+	httpClient := ratelimit.NewHTTPClient(rateLimiter, ratelimit.HTTPClientConfig{
+		Service: "immunefi",
+		Timeout: 30 * time.Second,
+		RetryConfig: ratelimit.RetryConfig{
+			MaxAttempts:     3,
+			InitialDelay:    1 * time.Second,
+			MaxDelay:        30 * time.Second,
+			Multiplier:      2.0,
+			JitterFactor:    0.1,
+			RetryableErrors: ratelimit.DefaultRetryableErrors(),
+		},
+		Logger: logger,
+	})
+
+	return &Immunefi{
+		config:     &cfg,
+		httpClient: httpClient,
+		logger:     logger,
+	}
+}
+
 func (i *Immunefi) GetName() string { return "immunefi" }
 
 // immunefiBounciesResponse represents the Immunefi bounties API response.

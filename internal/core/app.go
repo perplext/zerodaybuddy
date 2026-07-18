@@ -86,6 +86,7 @@ func (a *App) Initialize(ctx context.Context) error {
 	// Initialize platforms with rate limiter
 	a.platforms["hackerone"] = platform.NewHackerOneWithRateLimiter(a.config.HackerOne, a.logger, a.rateLimiter)
 	a.platforms["bugcrowd"] = platform.NewBugcrowdWithRateLimiter(a.config.Bugcrowd, a.logger, a.rateLimiter)
+	a.platforms["immunefi"] = platform.NewImmunefiWithRateLimiter(a.config.Immunefi, a.logger, a.rateLimiter)
 
 	// Initialize services
 	// Create auth store directly from the SQLite store's DB connection

@@ -100,7 +100,7 @@ func createListProgramsCommand(app *core.App) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&platform, "platform", "p", "", "Bug bounty platform (hackerone, bugcrowd)")
+	cmd.Flags().StringVarP(&platform, "platform", "p", "", "Bug bounty platform (hackerone, bugcrowd, immunefi)")
 
 	return cmd
 }
@@ -147,7 +147,7 @@ func createProjectCreateCommand(app *core.App) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&platform, "platform", "p", "", "Bug bounty platform (hackerone, bugcrowd, manual)")
+	cmd.Flags().StringVarP(&platform, "platform", "p", "", "Bug bounty platform (hackerone, bugcrowd, immunefi, manual)")
 	cmd.Flags().StringVarP(&program, "program", "n", "", "Program name or handle (platform mode)")
 	cmd.Flags().BoolVar(&manual, "manual", false, "Create a manual project from a local scope file")
 	cmd.Flags().StringVar(&name, "name", "", "Project name (manual mode)")
