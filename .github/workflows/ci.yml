@@ -61,11 +61,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        # Pinned to 1.25.11 to clear GO-2026-5039 (net/textproto error
-        # escaping) and GO-2026-5037 (crypto/x509 hostname parsing); 1.25.10
-        # previously cleared GO-2026-4982 (html/template XSS). Bump to the next
+        # Pinned to 1.25.12 to clear GO-2026-5856 (crypto/tls); 1.25.11
+        # previously cleared GO-2026-5039 and GO-2026-5037. Bump to the next
         # 1.25.x patch when a security advisory targets this line again.
-        go-version: '1.25.11'
+        go-version: '1.25.12'
 
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v6
@@ -90,11 +89,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        # Pinned to 1.25.11 to clear GO-2026-5039 (net/textproto error
-        # escaping) and GO-2026-5037 (crypto/x509 hostname parsing); 1.25.10
-        # previously cleared GO-2026-4982 (html/template XSS). Bump to the next
+        # Pinned to 1.25.12 to clear GO-2026-5856 (crypto/tls); 1.25.11
+        # previously cleared GO-2026-5039 and GO-2026-5037. Bump to the next
         # 1.25.x patch when a security advisory targets this line again.
-        go-version: '1.25.11'
+        go-version: '1.25.12'
 
     - name: Run govulncheck
       run: |
