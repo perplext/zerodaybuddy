@@ -129,32 +129,30 @@ func (h *BrowserAuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login?logged-out=1", http.StatusSeeOther)
 }
 
-// makeSessionCookie builds the Set-Cookie value carrying the JWT. secure
-// is decided per-request by the caller via isSecureRequest.
-func (h *BrowserAuthHandler) makeSessionCookie(token string, secure bool) *http.Cookie {
+// makeSessionCookie builds the Set-Cookie value carrying the JWT.
+// Session cookies are always marked Secure to enforce HTTPS-only transport.
+func (h *BrowserAuthHandler) makeSessionCookie(token string) *http.Cookie {
 	return &http.Cookie{
 		Name:     middleware.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   sessionCookieMaxAge,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
 
 // makeClearedCookie builds a Set-Cookie that immediately expires the session.
-// Browsers honor MaxAge=-1 (or 0 with Expires=epoch) by deleting the cookie.
-// The Secure flag must match the original cookie's flag — browsers won't
-// overwrite a Secure cookie with a non-Secure clearing cookie.
-func (h *BrowserAuthHandler) makeClearedCookie(secure bool) *http.Cookie {
+// Cleared cookies are always marked Secure to enforce HTTPS-only transport.
+func (h *BrowserAuthHandler) makeClearedCookie() *http.Cookie {
 	return &http.Cookie{
 		Name:     middleware.SessionCookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
