@@ -113,6 +113,7 @@ func createProjectCommand(app *core.App) *cobra.Command {
 
 	cmd.AddCommand(createProjectCreateCommand(app))
 	cmd.AddCommand(createProjectListCommand(app))
+	cmd.AddCommand(createProjectUpdateCommand(app))
 
 	return cmd
 }
@@ -218,6 +219,48 @@ func createProjectListCommand(app *core.App) *cobra.Command {
 			return app.ListProjects(cmd.Context())
 		},
 	}
+
+	return cmd
+}
+
+func createProjectUpdateCommand(app *core.App) *cobra.Command {
+	var scopeFile string
+
+	cmd := &cobra.Command{
+		Use:   "update <project-name-or-id>",
+		Short: "Update an existing project",
+		Long: `Update an existing project's scope from a YAML or JSON scope file.
+
+Example:
+  zerodaybuddy project update my-project --scope-file updated-scope.yaml`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectNameOrID := args[0]
+
+			if scopeFile == "" {
+				return fmt.Errorf("--scope-file is required")
+			}
+
+			// Validate file path.
+			if err := validation.FilePath(scopeFile); err != nil {
+				return fmt.Errorf("invalid scope file path: %w", err)
+			}
+			if !isAllowedScopeFileExt(scopeFile) {
+				return fmt.Errorf("invalid scope file: must have a .yaml, .yml, or .json extension")
+			}
+
+			// Load and validate the scope file.
+			scope, err := models.LoadScopeFile(scopeFile)
+			if err != nil {
+				return fmt.Errorf("failed to load scope file: %w", err)
+			}
+
+			return app.UpdateProjectScope(cmd.Context(), projectNameOrID, *scope)
+		},
+	}
+
+	cmd.Flags().StringVar(&scopeFile, "scope-file", "", "Path to a YAML or JSON scope file")
+	_ = cmd.MarkFlagRequired("scope-file")
 
 	return cmd
 }
