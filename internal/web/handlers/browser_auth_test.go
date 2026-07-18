@@ -142,34 +142,32 @@ func TestBrowserAuth_POST_HappyPathSetsCookie(t *testing.T) {
 	svc := setupBrowserAuthBackend(t)
 	createTestUser(t, t.Context(), svc, "alice", "ValidPass123!")
 
-	for _, secure := range []bool{false, true} {
-		t.Run(secureLabel(secure), func(t *testing.T) {
-			h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), secure, false)
+	// Test with cookieSecure=false in constructor — cookie should still be Secure=true
+	// because we now hardcode Secure=true to enforce HTTPS-only transport.
+	h := NewBrowserAuthHandler(svc, makeLoginTmpl(t), utils.NewLogger("", false), false, false)
 
-			form := url.Values{"username": {"alice"}, "password": {"ValidPass123!"}}
-			req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	form := url.Values{"username": {"alice"}, "password": {"ValidPass123!"}}
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-			w := httptest.NewRecorder()
-			h.login(w, req)
+	w := httptest.NewRecorder()
+	h.login(w, req)
 
-			require.Equal(t, http.StatusSeeOther, w.Code, "body: %s", w.Body.String())
-			assert.Equal(t, "/", w.Header().Get("Location"))
+	require.Equal(t, http.StatusSeeOther, w.Code, "body: %s", w.Body.String())
+	assert.Equal(t, "/", w.Header().Get("Location"))
 
-			// Inspect Set-Cookie
-			cookies := w.Result().Cookies()
-			require.Len(t, cookies, 1)
-			cookie := cookies[0]
-			assert.Equal(t, middleware.SessionCookieName, cookie.Name)
-			assert.NotEmpty(t, cookie.Value, "cookie should carry the JWT")
-			assert.True(t, cookie.HttpOnly, "session cookie must be HttpOnly")
-			assert.Equal(t, http.SameSiteStrictMode, cookie.SameSite)
-			assert.Equal(t, "/", cookie.Path)
-			assert.Equal(t, sessionCookieMaxAge, cookie.MaxAge)
-			assert.Equal(t, secure, cookie.Secure,
-				"Secure flag should mirror the cookieSecure constructor arg")
-		})
-	}
+	// Inspect Set-Cookie
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1)
+	cookie := cookies[0]
+	assert.Equal(t, middleware.SessionCookieName, cookie.Name)
+	assert.NotEmpty(t, cookie.Value, "cookie should carry the JWT")
+	assert.True(t, cookie.HttpOnly, "session cookie must be HttpOnly")
+	assert.Equal(t, http.SameSiteStrictMode, cookie.SameSite)
+	assert.Equal(t, "/", cookie.Path)
+	assert.Equal(t, sessionCookieMaxAge, cookie.MaxAge)
+	assert.True(t, cookie.Secure,
+		"Secure flag must always be true to enforce HTTPS-only cookie transport")
 }
 
 func TestBrowserAuth_POST_InvalidCredentialsShowsGenericError(t *testing.T) {
@@ -289,10 +287,3 @@ func TestBrowserAuth_POST_LogoutWithoutCookieIsIdempotent(t *testing.T) {
 }
 
 // -- helpers --
-
-func secureLabel(s bool) string {
-	if s {
-		return "secure_TLS_on"
-	}
-	return "secure_TLS_off"
-}
