@@ -18,12 +18,16 @@ import (
 )
 
 // ErrHackerTierToken signals that the configured HackerOne token returned 401 on
-// both the organization API and the hacker API — typically invalid credentials.
-// (If the hacker API works but the org API fails, we fall back silently.)
+// both the organization API and the hacker API. This usually means the token is
+// invalid/expired, but it can also happen for restricted accounts. As a fallback,
+// the message recommends manual project mode so the user is never fully blocked.
+// The message is built from the status alone; the raw response body is never
+// interpolated, to avoid leaking sensitive content into user-facing errors.
 var ErrHackerTierToken = errors.New(
-	"hackerone authentication failed (401): invalid API credentials or token expired. " +
-		"Check your HackerOne API token at https://hackerone.com/settings/api_token and ensure " +
-		"it hasn't been revoked.")
+	"hackerone authentication failed (401): the API token was rejected by both the organization " +
+		"and hacker APIs. Verify your token at https://hackerone.com/settings/api_token (check it " +
+		"hasn't been revoked). If the program API remains unavailable, create the project manually " +
+		"instead: zerodaybuddy project create --manual --name <name> --scope-file <scope.yaml>")
 
 // HackerOne implements the Platform interface for HackerOne
 type HackerOne struct {
