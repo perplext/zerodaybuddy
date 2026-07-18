@@ -39,12 +39,9 @@ type BrowserAuthHandler struct {
 // NewBrowserAuthHandler constructs a BrowserAuthHandler. tmpl must include
 // "login.tmpl".
 //
-// The cookie's Secure flag is decided per-request (see isSecureRequest) so
-// reverse-proxy deployments where TLS terminates upstream still issue Secure
-// cookies. enableTLS is the server's own TLS config (covers direct-TLS
-// deployments). proxyEnabled gates trust in X-Forwarded-Proto; when false,
-// the header is ignored to prevent header-injection attacks from a
-// non-proxy client claiming HTTPS.
+// Note: Cookies are now always issued with Secure=true to enforce HTTPS-only
+// transport. The enableTLS and proxyEnabled parameters are retained for
+// backward compatibility but no longer affect the Secure flag.
 func NewBrowserAuthHandler(authSvc *auth.Service, tmpl *template.Template, logger *utils.Logger, enableTLS, proxyEnabled bool) *BrowserAuthHandler {
 	return &BrowserAuthHandler{
 		authSvc:      authSvc,
@@ -155,33 +152,6 @@ func (h *BrowserAuthHandler) makeClearedCookie() *http.Cookie {
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	}
-}
-
-// isSecureRequest reports whether the cookie's Secure flag should be set
-// for this request. True when ANY of:
-//   - The request itself is TLS (r.TLS != nil) — direct-TLS deployments.
-//   - The server's TLS config is enabled (covers reverse proxies that route
-//     a plaintext loopback request to a TLS-terminating listener — rare).
-//   - proxyEnabled is true AND X-Forwarded-Proto says "https" — the common
-//     reverse-proxy deployment where the Go server speaks plain HTTP behind
-//     an upstream TLS terminator.
-//
-// proxyEnabled gates trust in X-Forwarded-Proto: a non-proxy client could
-// otherwise spoof the header and trick the server into issuing Secure
-// cookies on a plaintext connection (the cookie would silently fail to
-// transmit on the next request, breaking the session — annoying but not a
-// security hole, since browsers reject Secure cookies on http://).
-func (h *BrowserAuthHandler) isSecureRequest(r *http.Request) bool {
-	if r.TLS != nil {
-		return true
-	}
-	if h.enableTLS {
-		return true
-	}
-	if h.proxyEnabled && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		return true
-	}
-	return false
 }
 
 // renderLogin writes the login template with the given data. Errors during
