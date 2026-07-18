@@ -92,3 +92,55 @@ header.app-header nav ul.user-controls button {
   font-size: 0.85rem;
   margin: 0;
 }
+
+/* Create project section — collapsible panels for manual vs platform import. */
+.create-project-section {
+  margin-top: 2rem;
+}
+.create-project-section details {
+  margin-bottom: 1rem;
+}
+.create-project-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5rem 0;
+}
+.create-project-section details[open] summary {
+  margin-bottom: 0.75rem;
+}
+
+/* Manual project form styling. */
+.create-manual-project fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.create-manual-project label {
+  display: block;
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+.create-manual-project small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+}
+.create-manual-project textarea {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.85rem;
+}
+.create-manual-project .file-upload-label {
+  color: var(--pico-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.create-manual-project button[type="submit"] {
+  margin-top: 1rem;
+}
+
+/* Import from platform panel — reuses cli-panel styling. */
+.import-platform-project .cli-panel {
+  padding: 0.5rem 0;
+}

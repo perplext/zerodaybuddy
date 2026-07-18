@@ -7,8 +7,9 @@ Data shape: { User *auth.User, Projects []*models.Project, Error string }
 - Error is a soft message shown when storage failed; non-empty means the
   table renders empty and the banner explains why.
 
-Action posture (per T2-3 D5): "Create project" is shown as a copy-able CLI
-command, NOT a form submit. v1 deliberately ships zero new HTTP endpoints.
+Action posture: v1 keeps "create project" as a CLI-copy panel for platform
+imports, but adds a form for manual projects (scope paste/upload) per T3
+follow-up issue #25.
 */}}
 {{define "title"}}Dashboard — ZeroDayBuddy{{end}}
 {{define "content"}}
@@ -42,15 +43,69 @@ command, NOT a form submit. v1 deliberately ships zero new HTTP endpoints.
 </tbody>
 </table>
 {{else if not .Error}}
-<p>No projects yet. Create one with the CLI:</p>
+<p>No projects yet. Create one below or import from a platform via the CLI.</p>
 {{end}}
 
-<section class="cli-panel" aria-labelledby="create-project-title">
+<section class="create-project-section" aria-labelledby="create-project-title">
 <h2 id="create-project-title">Create a project</h2>
-<p>Project creation lives in the CLI in v1. Run:</p>
-<pre><code data-clipboard>{{cliCommand "project" "create" "--handle" "YOUR_HANDLE" "--platform" "hackerone"}}</code></pre>
+
+<details class="create-manual-project">
+<summary>Create manual project (paste or upload scope)</summary>
+<form id="create-manual-form"
+      hx-post="/api/projects"
+      hx-ext="json-enc"
+      hx-swap="none">
+  <fieldset>
+    <label for="manual-name">Project name</label>
+    <input type="text" id="manual-name" name="name" required
+           placeholder="My Security Research" autocomplete="off">
+
+    <label for="manual-handle">Handle (optional)</label>
+    <input type="text" id="manual-handle" name="handle"
+           placeholder="my-security-research" autocomplete="off">
+    <small>Leave blank to use the project name.</small>
+
+    <label for="manual-type">Project type</label>
+    <select id="manual-type" name="type">
+      <option value="research" selected>Research</option>
+      <option value="bug-bounty">Bug Bounty</option>
+      <option value="vdp">VDP</option>
+      <option value="pentest">Pentest</option>
+    </select>
+
+    <label for="manual-scope">Scope (YAML or JSON)</label>
+    <textarea id="manual-scope" name="_scope_raw" rows="10" required
+              placeholder="in_scope:
+  - type: domain
+    value: '*.example.com'
+  - type: url
+    value: 'https://api.example.com'
+out_of_scope:
+  - type: domain
+    value: 'admin.example.com'"></textarea>
+    <small>
+      Paste YAML/JSON scope, or
+      <label class="file-upload-label">
+        upload a file
+        <input type="file" id="scope-file-input" accept=".yaml,.yml,.json" hidden>
+      </label>.
+    </small>
+
+    <div id="manual-form-error" class="banner-error" style="display: none;"></div>
+  </fieldset>
+  <button type="submit">Create Project</button>
+</form>
+</details>
+
+<details class="import-platform-project">
+<summary>Import from platform (CLI)</summary>
+<div class="cli-panel">
+<p>Project import from HackerOne/Bugcrowd uses the CLI:</p>
+<pre><code data-clipboard>zerodaybuddy project create --handle YOUR_HANDLE --platform hackerone</code></pre>
 <button type="button" data-clipboard-target="prev">Copy</button>
-<p class="cli-hint">Or import an existing program: <code data-clipboard>zerodaybuddy list-programs</code> shows what's available on your configured platforms.</p>
+<p class="cli-hint">Run <code>zerodaybuddy list-programs</code> to see available programs on your configured platforms.</p>
+</div>
+</details>
 </section>
 {{end}}
 {{template "_layout.tmpl" .}}
