@@ -57,6 +57,24 @@ func TestNewImmunefi(t *testing.T) {
 	})
 }
 
+func TestNewImmunefiWithRateLimiter(t *testing.T) {
+	logger := utils.NewLogger("", true)
+	rateLimiter := ratelimit.New(ratelimit.DefaultConfig())
+
+	t.Run("default API URL", func(t *testing.T) {
+		cfg := config.ImmunefiConfig{}
+		p := NewImmunefiWithRateLimiter(cfg, logger, rateLimiter)
+		assert.NotNil(t, p)
+		assert.Equal(t, "immunefi", p.GetName())
+	})
+
+	t.Run("custom API URL", func(t *testing.T) {
+		cfg := config.ImmunefiConfig{APIUrl: "https://custom.api.com"}
+		p := NewImmunefiWithRateLimiter(cfg, logger, rateLimiter)
+		assert.NotNil(t, p)
+	})
+}
+
 func TestImmunefi_ListPrograms_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/bounties", r.URL.Path)

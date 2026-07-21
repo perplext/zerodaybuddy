@@ -15,7 +15,7 @@ import (
 
 var (
 	// Error types
-	ErrInvalidPlatform     = errors.New("invalid platform: must be one of 'hackerone', 'bugcrowd', or 'manual'")
+	ErrInvalidPlatform     = errors.New("invalid platform: must be one of 'hackerone', 'bugcrowd', 'immunefi', or 'manual'")
 	ErrInvalidConcurrency  = errors.New("invalid concurrency: must be between 1 and 100")
 	ErrInvalidPort         = errors.New("invalid port: must be between 1 and 65535")
 	ErrPrivilegedPort      = errors.New("privileged port: ports below 1024 require root privileges")
@@ -37,7 +37,7 @@ var (
 )
 
 // ValidPlatforms contains the list of supported bug bounty platforms
-var ValidPlatforms = []string{"hackerone", "bugcrowd", "manual"}
+var ValidPlatforms = []string{"hackerone", "bugcrowd", "immunefi", "manual"}
 
 // ValidReportFormats contains the list of supported report formats
 var ValidReportFormats = []string{"markdown", "pdf"}

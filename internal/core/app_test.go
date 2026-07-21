@@ -84,9 +84,10 @@ func TestAppInitialize(t *testing.T) {
 	assert.NotNil(t, app.scanSvc)
 	assert.NotNil(t, app.reportSvc)
 	assert.NotNil(t, app.webSvc)
-	assert.Len(t, app.platforms, 2)
+	assert.Len(t, app.platforms, 3)
 	assert.Contains(t, app.platforms, "hackerone")
 	assert.Contains(t, app.platforms, "bugcrowd")
+	assert.Contains(t, app.platforms, "immunefi")
 }
 
 func TestAppInitializeWithoutJWTSecret(t *testing.T) {
