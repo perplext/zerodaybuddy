@@ -286,6 +286,46 @@ func (a *App) ListProjects(ctx context.Context) error {
 	return nil
 }
 
+// UpdateProjectScope replaces a project's scope with contents from a scope file.
+// It validates the new scope before applying and preserves all other project fields.
+func (a *App) UpdateProjectScope(ctx context.Context, nameOrID string, newScope models.Scope) error {
+	if err := a.ensureInitialized(ctx); err != nil {
+		return fmt.Errorf("failed to initialize: %w", err)
+	}
+
+	// Validate the new scope before touching the project.
+	if err := models.ValidateScope(&newScope); err != nil {
+		return pkgerrors.ValidationError("invalid scope: %s", err.Error()).
+			WithContext("project", nameOrID)
+	}
+
+	// Try to fetch by name first (most common case), then by ID.
+	project, err := a.store.GetProjectByName(ctx, nameOrID)
+	if err != nil {
+		// Not found by name; try by ID.
+		project, err = a.store.GetProject(ctx, nameOrID)
+		if err != nil {
+			return pkgerrors.NotFoundError("project %q not found", nameOrID)
+		}
+	}
+
+	oldInScope := len(project.Scope.InScope)
+	oldOutScope := len(project.Scope.OutOfScope)
+
+	project.Scope = newScope
+
+	a.logger.Info("Updating scope for project %s (%s)", project.Name, project.ID)
+	if err := a.store.UpdateProject(ctx, project); err != nil {
+		return fmt.Errorf("failed to update project: %w", err)
+	}
+
+	fmt.Printf("Updated scope for project %s\n", project.Name)
+	fmt.Printf("  In-scope:     %d → %d targets\n", oldInScope, len(newScope.InScope))
+	fmt.Printf("  Out-of-scope: %d → %d targets\n", oldOutScope, len(newScope.OutOfScope))
+
+	return nil
+}
+
 // RunRecon runs reconnaissance on a project
 func (a *App) RunRecon(ctx context.Context, projectName string, concurrent int) error {
 	if err := a.ensureInitialized(ctx); err != nil {
