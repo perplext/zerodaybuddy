@@ -165,7 +165,9 @@ func TestHackerOne_ListPrograms(t *testing.T) {
 			// Create test server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Verify request
-				assert.Equal(t, "/programs", r.URL.Path)
+				// A 401 on the org API (/programs) triggers a fallback to the
+				// hacker API (/hackers/programs), so accept either path.
+				assert.Contains(t, []string{"/programs", "/hackers/programs"}, r.URL.Path)
 				assert.Equal(t, "GET", r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Accept"))
 
@@ -602,7 +604,11 @@ func TestHackerOne_FetchScope(t *testing.T) {
 			// Create test server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Verify request
-				assert.Equal(t, fmt.Sprintf("/programs/%s/structured_scopes", tt.handle), r.URL.Path)
+				// A 401 on the org API (/programs/...) triggers a fallback to the
+				// hacker API (/hackers/programs/...), so accept either path.
+				orgPath := fmt.Sprintf("/programs/%s/structured_scopes", tt.handle)
+				hackerPath := fmt.Sprintf("/hackers/programs/%s/structured_scopes", tt.handle)
+				assert.Contains(t, []string{orgPath, hackerPath}, r.URL.Path)
 				assert.Equal(t, "GET", r.Method)
 
 				// Send response
